@@ -50,12 +50,12 @@ const SEED_PERSONS = [
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-const COLOR_AVATAR = {
+const COLOR_AVATAR: Record<string, string> = {
   blue:"bg-blue-600", emerald:"bg-emerald-600", amber:"bg-amber-500",
   violet:"bg-violet-600", rose:"bg-rose-600", slate:"bg-slate-500",
   teal:"bg-teal-600", orange:"bg-orange-500",
 };
-const COLOR_BADGE = {
+const COLOR_BADGE: Record<string, string> = {
   blue:"bg-blue-50 text-blue-700 border-blue-200",
   emerald:"bg-emerald-50 text-emerald-700 border-emerald-200",
   amber:"bg-amber-50 text-amber-700 border-amber-200",
@@ -66,11 +66,46 @@ const COLOR_BADGE = {
   orange:"bg-orange-50 text-orange-700 border-orange-200",
 };
 
-function uid() { return Math.random().toString(36).slice(2,9); }
-function initials(name) { return name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase(); }
-function formatDate(d) { return d ? new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}) : "—"; }
+type TaskItem = {
+  id: string;
+  label: string;
+  description: string;
+};
 
-function PosBadge({ pos, size="sm" }) {
+type PositionItem = {
+  id: string;
+  title: string;
+  shortCode: string;
+  color: string;
+  taskIds: string[];
+};
+
+type PersonItem = {
+  id: string;
+  empId: string;
+  name: string;
+  email: string;
+  phone: string;
+  joinDate: string;
+  positionId: string;
+  status: string;
+};
+
+type PersonFormData = {
+  name: string;
+  empId: string;
+  email: string;
+  phone: string;
+  joinDate: string;
+  positionId: string;
+  status: "active" | "inactive";
+};
+
+function uid(): string { return Math.random().toString(36).slice(2,9); }
+function initials(name: string): string { return name.split(" ").map((n) => n[0]).join("").slice(0,2).toUpperCase(); }
+function formatDate(d: string | undefined | null): string { return d ? new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}) : "—"; }
+
+function PosBadge({ pos, size = "sm" }: { pos?: PositionItem; size?: "sm" | "xs" }) {
   if (!pos) return null;
   return (
     <span className={`inline-flex items-center border rounded-full font-semibold
@@ -83,7 +118,7 @@ function PosBadge({ pos, size="sm" }) {
 
 // ── Modal Wrapper ──────────────────────────────────────────────────────────────
 
-function Modal({ open, onClose, title, children, width="max-w-lg" }) {
+function Modal({ open, onClose, title, children, width = "max-w-lg" }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; width?: string }) {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
@@ -100,7 +135,7 @@ function Modal({ open, onClose, title, children, width="max-w-lg" }) {
 
 // ── Confirm Delete Modal ───────────────────────────────────────────────────────
 
-function ConfirmDelete({ open, onClose, onConfirm, name }) {
+function ConfirmDelete({ open, onClose, onConfirm, name }: { open: boolean; onClose: () => void; onConfirm: () => void; name?: string }) {
   return (
     <Modal open={open} onClose={onClose} title="Confirm Delete">
       <div className="p-6">
@@ -121,11 +156,27 @@ function ConfirmDelete({ open, onClose, onConfirm, name }) {
 // PERSONS CRUD
 // ══════════════════════════════════════════════════════════════════════════════
 
-function PersonForm({ initial, onSubmit, onCancel, positions }) {
-  const [form, setForm] = useState(initial || {
-    name:"", empId:"", email:"", phone:"", joinDate:"", positionId: positions[0]?.id||"", status:"active"
-  });
-  const set = (k,v) => setForm(f=>({...f,[k]:v}));
+function PersonForm({ initial, onSubmit, onCancel, positions }: { initial?: PersonItem | PersonFormData; onSubmit: (form: PersonFormData) => void; onCancel: () => void; positions: PositionItem[] }) {
+  const [form, setForm] = useState<PersonFormData>(
+    initial ? ({
+      name: initial.name,
+      empId: initial.empId,
+      email: initial.email,
+      phone: initial.phone,
+      joinDate: initial.joinDate,
+      positionId: initial.positionId,
+      status: initial.status === 'inactive' ? 'inactive' : 'active',
+    } as PersonFormData) : {
+      name: "",
+      empId: "",
+      email: "",
+      phone: "",
+      joinDate: "",
+      positionId: positions[0]?.id || "",
+      status: "active",
+    }
+  );
+  const set = (k: keyof PersonFormData, v: string) => setForm((f) => ({ ...f, [k]: v }));
   const valid = form.name.trim() && form.empId.trim() && form.positionId;
 
   return (
@@ -183,9 +234,9 @@ function PersonForm({ initial, onSubmit, onCancel, positions }) {
   );
 }
 
-function PersonDetailDrawer({ person, onClose, onEdit, positions, tasks }) {
-  const pos = positions.find(p => p.id===person.positionId);
-  const assignedTasks = tasks.filter(t => pos?.taskIds?.includes(t.id));
+function PersonDetailDrawer({ person, onClose, onEdit, positions, tasks }: { person: PersonItem; onClose: () => void; onEdit: () => void; positions: PositionItem[]; tasks: TaskItem[] }) {
+  const pos = positions.find((p) => p.id === person.positionId);
+  const assignedTasks = tasks.filter((t) => pos?.taskIds?.includes(t.id));
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose}/>
@@ -251,42 +302,51 @@ function PersonDetailDrawer({ person, onClose, onEdit, positions, tasks }) {
   );
 }
 
-function PersonsTab({ persons, setPersons, positions, tasks, createPerson, updatePerson, deletePerson }) {
-  const [search, setSearch] = useState("");
-  const [filterPos, setFilterPos] = useState("all");
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [modal, setModal] = useState(null);
-  const [target, setTarget] = useState(null);
-  const [drawer, setDrawer] = useState(null);
+function PersonsTab({ persons, setPersons, positions, tasks, createPerson, updatePerson, deletePerson }: {
+  persons: PersonItem[];
+  setPersons: React.Dispatch<React.SetStateAction<PersonItem[]>>;
+  positions: PositionItem[];
+  tasks: TaskItem[];
+  createPerson?: (data: PersonFormData) => Promise<void>;
+  updatePerson?: (id: string, data: PersonFormData) => Promise<void>;
+  deletePerson?: (id: string) => Promise<void>;
+}) {
+  const [search, setSearch] = useState<string>("");
+  const [filterPos, setFilterPos] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [modal, setModal] = useState<"create" | "edit" | "delete" | null>(null);
+  const [target, setTarget] = useState<PersonItem | null>(null);
+  const [drawer, setDrawer] = useState<PersonItem | null>(null);
 
-  const filtered = persons.filter(p => {
+  const filtered = persons.filter((p) => {
     const ms = p.name.toLowerCase().includes(search.toLowerCase()) || p.empId.toLowerCase().includes(search.toLowerCase());
     const mp = filterPos==="all" || p.positionId===filterPos;
     const mst = filterStatus==="all" || p.status===filterStatus;
     return ms && mp && mst;
   });
 
-  const create = async (data) => {
+  const create = async (data: PersonFormData) => {
     if (createPerson) {
       await createPerson(data);
     } else {
-      setPersons(prev => [...prev, { id:"p"+uid(), ...data }]);
+      setPersons((prev) => [...prev, { id: "p" + uid(), ...data }]);
     }
     setModal(null);
   };
-  const update = async (data) => {
+  const update = async (data: PersonFormData) => {
     if (updatePerson && target) {
       await updatePerson(target.id, data);
-    } else {
-      setPersons(prev => prev.map(p => p.id===target.id ? {...p,...data } : p));
+    } else if (target) {
+      setPersons((prev) => prev.map((p) => (p.id === target.id ? { ...p, ...data } : p)));
     }
-    setModal(null); setDrawer(null);
+    setModal(null);
+    setDrawer(null);
   };
   const remove = async () => {
     if (deletePerson && target) {
       await deletePerson(target.id);
-    } else {
-      setPersons(prev => prev.filter(p => p.id!==target.id));
+    } else if (target) {
+      setPersons((prev) => prev.filter((p) => p.id !== target.id));
     }
     setModal(null);
   };
@@ -416,7 +476,7 @@ function PersonsTab({ persons, setPersons, positions, tasks, createPerson, updat
         <PersonForm onSubmit={create} onCancel={()=>setModal(null)} positions={positions}/>
       </Modal>
       <Modal open={modal==="edit"} onClose={()=>setModal(null)} title="Edit Person">
-        {target && <PersonForm initial={target} onSubmit={update} onCancel={()=>setModal(null)} positions={positions}/>}
+        {target && <PersonForm initial={target as PersonFormData} onSubmit={update} onCancel={()=>setModal(null)} positions={positions}/>}
       </Modal>
       <ConfirmDelete open={modal==="delete"} onClose={()=>setModal(null)} onConfirm={remove} name={target?.name}/>
     </div>
@@ -458,7 +518,7 @@ export default function App() {
     load();
   }, []);
 
-  const create = async (data) => {
+  const create = async (data: PersonFormData) => {
     try {
       const payload = {
         fullName: data.name,
@@ -475,7 +535,7 @@ export default function App() {
       console.error("Create person failed:", err);
     }
   };
-  const update = async (id, data) => {
+  const update = async (id: string, data: PersonFormData) => {
     try {
       const payload = {
         fullName: data.name,
@@ -492,7 +552,7 @@ export default function App() {
     }
   };
 
-  const remove = async (id) => {
+  const remove = async (id: string) => {
     try {
       await apiFetch(`/employees/${id}`, { method: "DELETE" }).catch(() => null);
       setPersons((prev) => prev.filter((p) => p.id !== id));
