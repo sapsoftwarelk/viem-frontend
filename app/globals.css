@@ -1,0 +1,82 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { box-sizing: border-box; }
+
+html, body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: #F7F6F3;
+  color: #111111;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #D3D1C7; border-radius: 99px; }
+
+/* Sidebar nav active indicator */
+.sidebar-link { position: relative; }
+.sidebar-link.active::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 50%;
+  transform: translateY(-50%);
+  width: 3px; height: 60%;
+  background: #378ADD;
+  border-radius: 0 3px 3px 0;
+}
+
+/* Mobile overlay */
+.sidebar-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 40;
+}
+
+@layer components {
+  .badge {
+    @apply inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full;
+  }
+  .badge-blue  { @apply bg-viems-blue-light text-viems-blue; }
+  .badge-green { @apply bg-viems-green-bg text-viems-green; }
+  .badge-amber { @apply bg-viems-amber-bg text-viems-amber; }
+  .badge-red   { @apply bg-viems-red-bg text-viems-red; }
+  .badge-gray  { @apply bg-viems-gray-light text-viems-gray; }
+
+  .btn {
+    @apply inline-flex items-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-lg border border-viems-gray-border bg-white text-gray-900 hover:bg-viems-gray-bg transition-colors cursor-pointer;
+  }
+  .btn-primary {
+    @apply bg-viems-blue text-white border-viems-blue hover:bg-viems-blue-mid;
+  }
+
+  .stat-card {
+    @apply bg-white border border-viems-gray-border rounded-xl p-4;
+  }
+
+  .data-card {
+    @apply bg-white border border-viems-gray-border rounded-xl overflow-hidden;
+  }
+
+  .card-header {
+    @apply px-4 py-3 border-b border-viems-gray-border flex items-center justify-between;
+  }
+
+  .card-title {
+    @apply text-[13px] font-semibold text-gray-900;
+  }
+
+  /* Table */
+  .viems-table { @apply w-full text-[12px]; border-collapse: collapse; }
+  .viems-table th {
+    @apply text-left text-[11px] font-semibold text-gray-800 uppercase tracking-wide px-3 py-2 border-b border-viems-gray-border bg-viems-gray-bg;
+  }
+  .viems-table td {
+    @apply px-3 py-2.5 border-b border-viems-gray-border text-gray-900 font-medium;
+  }
+  .viems-table tr:last-child td { border-bottom: none; }
+  .viems-table tr:hover td { @apply bg-viems-gray-bg; }
+}
