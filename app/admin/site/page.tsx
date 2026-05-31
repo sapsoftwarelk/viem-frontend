@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { apiFetch } from "../../../lib/api";
 import {
   Plus, Search, Filter, Edit2, Trash2, X, ChevronRight,
   Building2, MapPin, Phone, Calendar, Clock, ChevronDown,
@@ -27,6 +28,38 @@ const STATUS_STYLES: Record<string, "green" | "amber" | "gray" | "blue" | "red">
 
 function generateSiteId(region: string, seq: number) {
   return `SITE-${region}-${pad(seq)}`;
+}
+
+function mapBackendSite(site: any): Site {
+  const subLevels = Array.isArray(site.subLevels) ? site.subLevels : [];
+  return {
+    id: site.id,
+    name: site.siteName || site.name || "",
+    region: site.region || "",
+    seq: site.seq || 1,
+    status: site.status || "Planning",
+    client: site.client || "",
+    contactNumber: site.contactNumber || "",
+    address: site.address || "",
+    startDate: site.startDate ? site.startDate.split("T")[0] : "",
+    remarks: site.remarks || "",
+    subLevels,
+  };
+}
+
+function sitePayload(site: Partial<Site>) {
+  return {
+    siteName: site.name,
+    region: site.region,
+    seq: site.seq,
+    status: site.status,
+    client: site.client,
+    contactNumber: site.contactNumber,
+    address: site.address,
+    startDate: site.startDate || undefined,
+    remarks: site.remarks || "",
+    subLevels: site.subLevels || [],
+  };
 }
 
 type SubLevel = {
@@ -207,26 +240,26 @@ function SiteDetailPanel({ site, onUpdate, onClose }: any) {
 
   const updateSite = (patch: Partial<Site>) => onUpdate({ ...site, ...patch });
 
-  const handleAddSub = (data: any) => {
+  const handleAddSub = async (data: any) => {
     const newSub = {
       id: `${site.id}-LVL-${pad(site.subLevels.length + 1, 2)}`,
       ...data,
     };
-    updateSite({ subLevels: [...site.subLevels, newSub] });
+    await updateSite({ subLevels: [...site.subLevels, newSub] });
     setModal(null);
   };
 
-  const handleEditSub = (data: any) => {
+  const handleEditSub = async (data: any) => {
     if (modal?.type !== "edit") return;
-    updateSite({
+    await updateSite({
       subLevels: site.subLevels.map((s: SubLevel) => s.id === modal.sub.id ? { ...s, ...data } : s)
     });
     setModal(null);
   };
 
-  const handleDeleteSub = () => {
+  const handleDeleteSub = async () => {
     if (modal?.type !== "delete") return;
-    updateSite({ subLevels: site.subLevels.filter((s: SubLevel) => s.id !== modal.sub.id) });
+    await updateSite({ subLevels: site.subLevels.filter((s: SubLevel) => s.id !== modal.sub.id) });
     setModal(null);
   };
 
@@ -306,10 +339,34 @@ export default function SiteManagementPage() {
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
+  const [apiError, setApiError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const [showAddSite, setShowAddSite] = useState(false);
   const [editSite, setEditSite] = useState<Site | null>(null);
   const [deleteSiteTarget, setDeleteSiteTarget] = useState<Site | null>(null);
+
+  useEffect(() => {
+    const loadSites = async () => {
+      try {
+        setLoading(true);
+        setApiError("");
+        const result = await apiFetch("/site-locations");
+        if (Array.isArray(result)) {
+          const mapped = result.map(mapBackendSite);
+          setSites(mapped);
+          setSelectedSiteId((current) => current && mapped.some((site) => site.id === current) ? current : mapped[0]?.id || null);
+        }
+      } catch (error: any) {
+        console.warn("Load site locations failed, using seed data", error);
+        setApiError(error?.message || "Unable to load site locations from backend.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadSites();
+  }, []);
 
   const filteredSites = sites.filter(site => {
     const matchesSearch = site.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -319,35 +376,50 @@ export default function SiteManagementPage() {
     return matchesSearch && matchesFilter;
   });
 
-  const handleAddSite = (data: any) => {
-    const regionSeq = sites.filter(s => s.region === data.region).length + 1;
-    const newSite: Site = {
-      id: generateSiteId(data.region, regionSeq),
-      name: data.name,
-      region: data.region,
-      seq: regionSeq,
-      status: data.status,
-      client: data.client,
-      contactNumber: data.contactNumber,
-      address: data.address,
-      startDate: data.startDate,
-      remarks: data.remarks || "",
-      subLevels: [],
-    };
-    setSites([newSite, ...sites]);
-    setShowAddSite(false);
-    setSelectedSiteId(newSite.id);
+  const handleAddSite = async (data: any) => {
+    try {
+      setApiError("");
+      const created = await apiFetch("/site-locations", {
+        method: "POST",
+        body: JSON.stringify(sitePayload({ ...data, subLevels: [] })),
+      });
+      const newSite = mapBackendSite(created);
+      setSites((prev) => [newSite, ...prev]);
+      setShowAddSite(false);
+      setSelectedSiteId(newSite.id);
+    } catch (error: any) {
+      setApiError(error?.message || "Unable to create site.");
+      console.error("Create site failed", error);
+    }
   };
 
-  const handleUpdateSite = (updated: Site) => {
-    setSites(prev => prev.map(s => s.id === updated.id ? updated : s));
-    if (selectedSiteId === updated.id) setSelectedSiteId(updated.id);
+  const handleUpdateSite = async (updated: Site) => {
+    try {
+      setApiError("");
+      const saved = await apiFetch(`/site-locations/${updated.id}`, {
+        method: "PUT",
+        body: JSON.stringify(sitePayload(updated)),
+      });
+      const mapped = mapBackendSite(saved);
+      setSites(prev => prev.map(s => s.id === mapped.id ? mapped : s));
+      if (selectedSiteId === mapped.id) setSelectedSiteId(mapped.id);
+    } catch (error: any) {
+      setApiError(error?.message || "Unable to update site.");
+      console.error("Update site failed", error);
+    }
   };
 
-  const handleDeleteSite = (id: string) => {
-    setSites(prev => prev.filter(s => s.id !== id));
-    if (selectedSiteId === id) setSelectedSiteId(null);
-    setDeleteSiteTarget(null);
+  const handleDeleteSite = async (id: string) => {
+    try {
+      setApiError("");
+      await apiFetch(`/site-locations/${id}`, { method: "DELETE" });
+      setSites(prev => prev.filter(s => s.id !== id));
+      if (selectedSiteId === id) setSelectedSiteId(null);
+      setDeleteSiteTarget(null);
+    } catch (error: any) {
+      setApiError(error?.message || "Unable to delete site.");
+      console.error("Delete site failed", error);
+    }
   };
 
   const selectedSite = sites.find(s => s.id === selectedSiteId);
@@ -357,6 +429,12 @@ export default function SiteManagementPage() {
       {/* Left Panel – Site List */}
       <div className="w-96 flex-shrink-0 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
         <div className="p-4 border-b border-slate-100">
+          {apiError && (
+            <div className="mb-3 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
+              <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
+              <span>{apiError}</span>
+            </div>
+          )}
           <div className="relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input type="text" placeholder="Search sites..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:bg-white" />
@@ -369,7 +447,11 @@ export default function SiteManagementPage() {
           <button onClick={() => setShowAddSite(true)} className="btn btn-primary w-full mt-4"><Plus size={14} /> New Main Site</button>
         </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {filteredSites.map(site => (
+          {loading ? (
+            <div className="py-10 text-center text-sm text-slate-400">Loading sites...</div>
+          ) : filteredSites.length === 0 ? (
+            <div className="py-10 text-center text-sm text-slate-400">No sites found.</div>
+          ) : filteredSites.map(site => (
             <div key={site.id} onClick={() => setSelectedSiteId(site.id)} className={`p-3 rounded-xl border cursor-pointer transition-all hover:shadow-sm ${selectedSiteId === site.id ? "border-emerald-300 bg-emerald-50/30" : "border-slate-200 hover:border-slate-300"}`}>
               <div className="flex justify-between items-start">
                 <div><div className="font-mono text-[10px] text-slate-400">{site.id}</div><div className="font-semibold text-slate-800">{site.name}</div><div className="text-xs text-slate-500 mt-0.5">{site.client}</div></div>
@@ -398,7 +480,7 @@ export default function SiteManagementPage() {
 
       {/* Modals */}
       {showAddSite && <SiteFormModal onClose={() => setShowAddSite(false)} onSave={handleAddSite} />}
-      {editSite && <SiteFormModal isEdit initial={editSite} onClose={() => setEditSite(null)} onSave={(data: any) => { handleUpdateSite({ ...editSite, ...data }); setEditSite(null); }} />}
+      {editSite && <SiteFormModal isEdit initial={editSite} onClose={() => setEditSite(null)} onSave={async (data: any) => { await handleUpdateSite({ ...editSite, ...data }); setEditSite(null); }} />}
       {deleteSiteTarget && <ConfirmModal name={deleteSiteTarget.name} onClose={() => setDeleteSiteTarget(null)} onConfirm={() => handleDeleteSite(deleteSiteTarget.id)} />}
     </div>
   );
