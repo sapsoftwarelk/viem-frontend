@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode, type ChangeEvent } from "react";
 import { apiFetch } from "../../../lib/api";
 import {
   Plus, Search, Eye, Pencil, Trash2, X, AlertCircle,
@@ -32,10 +32,41 @@ const CAT_BG = {
   teal:    "bg-teal-600",
 };
 
+type FuelType = typeof FUEL_TYPES[number];
+type VehicleStatus = typeof STATUSES[number];
+type VehicleCategory = typeof CATEGORIES[number];
+
+type Vehicle = {
+  id: string;
+  regNo: string;
+  make: string;
+  model: string;
+  year: number;
+  color: string;
+  fuel: FuelType | string;
+  category: VehicleCategory | string;
+  status: VehicleStatus | string;
+  insuranceExp: string;
+  regExp: string;
+  notes: string;
+};
+
+type VehicleAlertSeverity = "expired" | "critical";
+type VehicleAlertType = "insurance" | "reg";
+
+type VehicleAlert = {
+  id: string;
+  vehicle: Vehicle;
+  type: VehicleAlertType;
+  label: string;
+  severity: VehicleAlertSeverity;
+  days: number;
+};
+
 // ── Seed data ─────────────────────────────────────────────────────────────────
 
 const TODAY = new Date();
-const daysFromNow = (n) => {
+const daysFromNow = (n: number): string => {
   const d = new Date(TODAY);
   d.setDate(d.getDate() + n);
   return d.toISOString().slice(0, 10);
@@ -55,22 +86,22 @@ const SEED_VEHICLES = [
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
 
-function catColor(cat) {
-  const idx = CATEGORIES.indexOf(cat);
+function catColor(cat: string): string {
+  const idx = CATEGORIES.indexOf(cat as VehicleCategory);
   return CATEGORY_COLORS[idx >= 0 ? idx % CATEGORY_COLORS.length : 0] || "slate";
 }
 
-function formatDate(d) {
+function formatDate(d?: string | Date | null): string {
   return d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 }
 
-function daysUntil(dateStr) {
+function daysUntil(dateStr?: string | null): number | null {
   if (!dateStr) return null;
-  return Math.ceil((new Date(dateStr) - new Date()) / (1000 * 60 * 60 * 24));
+  return Math.ceil((new Date(dateStr).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
 }
 
 // "expired" | "critical" (≤7 days) | "ok" | null
-function dateStatus(dateStr) {
+function dateStatus(dateStr?: string | null): VehicleAlertSeverity | "ok" | null {
   const d = daysUntil(dateStr);
   if (d === null) return null;
   if (d < 0)  return "expired";
@@ -79,8 +110,8 @@ function dateStatus(dateStr) {
 }
 
 // Build the deduplicated alert list for a set of vehicles, respecting dismissed IDs
-function buildAlerts(vehicles, dismissed) {
-  const alerts = [];
+function buildAlerts(vehicles: Vehicle[], dismissed: Set<string>): VehicleAlert[] {
+  const alerts: VehicleAlert[] = [];
   vehicles.forEach((v) => {
     const ins = dateStatus(v.insuranceExp);
     const reg = dateStatus(v.regExp);
@@ -104,12 +135,12 @@ function buildAlerts(vehicles, dismissed) {
 
 // ── Small shared components ───────────────────────────────────────────────────
 
-function DateChip({ dateStr, label }) {
+function DateChip({ dateStr, label }: { dateStr?: string | null; label: string }) {
   const s = dateStatus(dateStr);
   const d = daysUntil(dateStr);
   if (!dateStr) return <span className="text-[11px] text-slate-300">—</span>;
 
-  const styles = {
+  const styles: Record<Exclude<ReturnType<typeof dateStatus>, null>, string> = {
     expired:  "bg-rose-50 text-rose-600 border-rose-200",
     critical: "bg-amber-50 text-amber-700 border-amber-200",
     ok:       "bg-slate-50 text-slate-500 border-slate-200",
@@ -125,7 +156,7 @@ function DateChip({ dateStr, label }) {
   );
 }
 
-function StatusBadge({ status }) {
+function StatusBadge({ status }: { status: string }) {
   const c = STATUS_STYLES[status] || STATUS_STYLES.Inactive;
   return (
     <span className={`inline-flex items-center text-[10px] px-2 py-0.5 rounded-full font-semibold border ${c.bg} ${c.text} ${c.border}`}>
@@ -134,9 +165,9 @@ function StatusBadge({ status }) {
   );
 }
 
-function CatBadge({ category }) {
+function CatBadge({ category }: { category: string }) {
   const col = catColor(category);
-  const map = {
+  const map: Record<string, string> = {
     blue:    "bg-blue-50 text-blue-700 border-blue-200",
     emerald: "bg-emerald-50 text-emerald-700 border-emerald-200",
     amber:   "bg-amber-50 text-amber-700 border-amber-200",
@@ -152,15 +183,20 @@ function CatBadge({ category }) {
   );
 }
 
-function CatIcon({ category, size = 14 }) {
-  const icons = { Lorry: Truck, Motorcycle: Bike, Bus, Van: Truck };
+function CatIcon({ category, size = 14 }: { category: string; size?: number }) {
+  const icons: Record<string, typeof Car> = {
+    Lorry: Truck,
+    Motorcycle: Bike,
+    Bus,
+    Van: Truck,
+  };
   const Icon = icons[category] || Car;
   return <Icon size={size} />;
 }
 
 // ── Notification Panel ────────────────────────────────────────────────────────
 
-function NotificationPanel({ vehicles, dismissed, onDismiss }) {
+function NotificationPanel({ vehicles, dismissed, onDismiss }: { vehicles: Vehicle[]; dismissed: Set<string>; onDismiss: (id: string) => void }) {
   const alerts = buildAlerts(vehicles, dismissed);
   if (!alerts.length) return null;
 
@@ -211,7 +247,7 @@ function NotificationPanel({ vehicles, dismissed, onDismiss }) {
 
 // ── Modal shell ───────────────────────────────────────────────────────────────
 
-function Modal({ open, onClose, title, children, width = "max-w-xl" }) {
+function Modal({ open, onClose, title, children, width = "max-w-xl" }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; width?: string }) {
   if (!open) return null;
   return (
     <div
@@ -237,7 +273,7 @@ function Modal({ open, onClose, title, children, width = "max-w-xl" }) {
   );
 }
 
-function ConfirmDelete({ open, onClose, onConfirm, name }) {
+function ConfirmDelete({ open, onClose, onConfirm, name }: { open: boolean; onClose: () => void; onConfirm: () => void; name?: string }) {
   return (
     <Modal open={open} onClose={onClose} title="Confirm Delete" width="max-w-md">
       <div className="p-6">
@@ -268,27 +304,27 @@ function ConfirmDelete({ open, onClose, onConfirm, name }) {
 
 // ── Vehicle Form ──────────────────────────────────────────────────────────────
 
-function VehicleForm({ initial, onSubmit, onCancel }) {
-  const empty = {
+function VehicleForm({ initial, onSubmit, onCancel }: { initial?: Vehicle | null; onSubmit: (data: Vehicle) => void | Promise<void>; onCancel: () => void }) {
+  const empty: Vehicle = {
     regNo: "", make: "", model: "", year: new Date().getFullYear(),
     color: "", fuel: "Petrol", category: "Car", status: "Active",
     insuranceExp: "", regExp: "", notes: "",
   };
-  const [form, setForm] = useState(initial || empty);
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const [form, setForm] = useState<Vehicle>(initial || empty);
+  const set = <K extends keyof Vehicle>(k: K, v: Vehicle[K]) => setForm((f) => ({ ...f, [k]: v }));
   const valid = form.regNo.trim() && form.make.trim() && form.model.trim();
 
   const inputCls =
     "w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white text-slate-700";
 
-  const Field = ({ label, children }) => (
+  const Field = ({ label, children }: { label: string; children: ReactNode }) => (
     <div>
       <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5 tracking-wider">{label}</label>
       {children}
     </div>
   );
 
-  const dateHint = (key) => {
+  const dateHint = (key: "insuranceExp" | "regExp") => {
     const s = dateStatus(form[key]);
     if (!form[key] || !s) return null;
     const color =
@@ -325,7 +361,7 @@ function VehicleForm({ initial, onSubmit, onCancel }) {
           <input value={form.model} onChange={(e) => set("model", e.target.value)} placeholder="HiAce" className={inputCls} />
         </Field>
         <Field label="Year">
-          <input value={form.year} onChange={(e) => set("year", e.target.value)} type="number" min="1990" max="2035" className={inputCls} />
+          <input value={form.year} onChange={(e) => set("year", Number((e as ChangeEvent<HTMLInputElement>).target.value))} type="number" min="1990" max="2035" className={inputCls} />
         </Field>
         <Field label="Color">
           <input value={form.color} onChange={(e) => set("color", e.target.value)} placeholder="White" className={inputCls} />
@@ -390,7 +426,7 @@ function VehicleForm({ initial, onSubmit, onCancel }) {
 
 // ── Detail Drawer ─────────────────────────────────────────────────────────────
 
-function VehicleDrawer({ vehicle, onClose, onEdit }) {
+function VehicleDrawer({ vehicle, onClose, onEdit }: { vehicle: Vehicle; onClose: () => void; onEdit: () => void }) {
   const col = catColor(vehicle.category);
   const avatarBg = CAT_BG[col] || "bg-slate-500";
 
@@ -475,16 +511,16 @@ function VehicleDrawer({ vehicle, onClose, onEdit }) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 export default function VehicleRegistration() {
-  const [vehicles, setVehicles] = useState(SEED_VEHICLES);
-  const [dismissed, setDismissed]       = useState(new Set());
+  const [vehicles, setVehicles] = useState<Vehicle[]>(SEED_VEHICLES);
+  const [dismissed, setDismissed]       = useState<Set<string>>(new Set());
   const [search, setSearch]             = useState("");
-  const [filterCat, setFilterCat]       = useState("all");
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [modal, setModal]               = useState(null); // null | "create" | "edit" | "delete"
-  const [target, setTarget]             = useState(null);
-  const [drawer, setDrawer]             = useState(null);
+  const [filterCat, setFilterCat]       = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [modal, setModal]               = useState<"create" | "edit" | "delete" | null>(null);
+  const [target, setTarget]             = useState<Vehicle | null>(null);
+  const [drawer, setDrawer]             = useState<Vehicle | null>(null);
 
-  const dismissAlert = (id) => setDismissed((prev) => new Set([...prev, id]));
+  const dismissAlert = (id: string) => setDismissed((prev) => new Set([...prev, id]));
 
   const filtered = vehicles.filter((v) => {
     const q = search.toLowerCase();
@@ -510,7 +546,7 @@ export default function VehicleRegistration() {
     load();
   }, []);
 
-  const normalizeVehiclePayload = (data: any) => {
+  const normalizeVehiclePayload = (data: Vehicle) => {
     return {
       registrationNo: data.regNo,
       category: data.category,
@@ -526,7 +562,7 @@ export default function VehicleRegistration() {
     };
   };
 
-  const create = async (data) => {
+  const create = async (data: Vehicle) => {
     try {
       const payload = normalizeVehiclePayload(data);
       const created = await apiFetch('/vehicles', { method: 'POST', body: JSON.stringify(payload) }).catch(() => null);
@@ -537,7 +573,7 @@ export default function VehicleRegistration() {
     setModal(null);
   };
 
-  const update = async (data) => {
+  const update = async (data: Vehicle) => {
     try {
       if (!target) return;
       const payload = normalizeVehiclePayload(data);

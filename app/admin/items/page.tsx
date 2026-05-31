@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
   Plus, Search, Eye, Pencil, Trash2, X, AlertCircle,
   QrCode, Package, Wrench, RefreshCw, ChevronDown,
@@ -188,7 +189,9 @@ async function apiFetch(path, options = {}) {
 
   const body = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(body?.message || body?.error || response.statusText || "API request failed");
+    const error = new Error(body?.message || body?.error || response.statusText || "API request failed") as Error & { status: number };
+    error.status = response.status;
+    throw error;
   }
   return body;
 }
@@ -468,6 +471,15 @@ function MetaFields({ fields, values, onChange, inputCls }) {
 // ITEM FORM
 // ─────────────────────────────────────────────────────────────────────────────
 
+function Field({ label, children, span = 1 }) {
+  return (
+    <div className={span === 2 ? "col-span-2" : ""}>
+      <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5 tracking-wider">{label}</label>
+      {children}
+    </div>
+  );
+}
+
 function ItemForm({ initial, onSubmit, onCancel }) {
   const defaultForm = {
     type: "Tool",
@@ -506,13 +518,6 @@ function ItemForm({ initial, onSubmit, onCancel }) {
   const valid = form.name.trim() && form.categoryCode;
 
   const inputCls = "w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white text-slate-700";
-
-  const Field = ({ label, children, span = 1 }) => (
-    <div className={span === 2 ? "col-span-2" : ""}>
-      <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5 tracking-wider">{label}</label>
-      {children}
-    </div>
-  );
 
   const handleSubmit = () => {
     if (!valid) return;
@@ -854,6 +859,7 @@ const SEED_ITEMS = [
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function ItemRegistration() {
+  const router = useRouter();
   const [items, setItems] = useState(SEED_ITEMS);
   const [subCategories, setSubCategories] = useState([]);
   const [search, setSearch] = useState("");
@@ -866,13 +872,23 @@ export default function ItemRegistration() {
   const [apiError, setApiError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const handleAuthFailure = useCallback(() => {
+    localStorage.removeItem("admin_token");
+    setApiError("Your session has expired. Please sign in again.");
+    router.replace("/login");
+  }, [router]);
+
   useEffect(() => {
     const load = async () => {
       try {
         const categories = await apiFetch("/sub-categories");
         setSubCategories(categories || []);
-      } catch (error) {
+      } catch (error: any) {
         console.warn("Unable to load categories from backend:", error);
+        if (error?.status === 401) {
+          handleAuthFailure();
+          return;
+        }
       }
 
       try {
@@ -880,14 +896,18 @@ export default function ItemRegistration() {
         const backendItems = Array.isArray(result) ? result : [];
         const mappedItems = backendItems.map(mapBackendItem);
         setItems(mappedItems);
-      } catch (error) {
+      } catch (error: any) {
         console.warn("Unable to load items from backend:", error);
+        if (error?.status === 401) {
+          handleAuthFailure();
+          return;
+        }
         setApiError("Unable to connect to the backend item service. Showing local data only.");
       }
     };
 
     load();
-  }, []);
+  }, [handleAuthFailure]);
 
   const create = async (data) => {
     try {
@@ -911,7 +931,11 @@ export default function ItemRegistration() {
         setItems((prev) => [...newItems, ...prev]);
       }
       setModal(null);
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.status === 401) {
+        handleAuthFailure();
+        return;
+      }
       const message = error?.message || "Unable to create item.";
       setApiError(message);
       console.error("Create item failed:", error);
