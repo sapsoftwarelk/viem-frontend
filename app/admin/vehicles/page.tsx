@@ -10,9 +10,9 @@ import {
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const FUEL_TYPES = ["Petrol", "Diesel", "Electric", "Hybrid", "CNG"];
-const STATUSES   = ["Active", "Inactive", "Under Repair", "Decommissioned"];
-const CATEGORIES = ["Car", "Van", "Lorry", "Motorcycle", "Three-Wheeler", "Bus", "Other"];
+const FUEL_TYPES = ["Petrol", "Diesel", "Electric", "Hybrid", "CNG"] as const;
+const STATUSES   = ["Active", "Inactive", "Under Repair", "Decommissioned"] as const;
+const CATEGORIES = ["Car", "Van", "Lorry", "Motorcycle", "Three-Wheeler", "Bus", "Other"] as const;
 
 const STATUS_STYLES = {
   Active:         { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
@@ -21,7 +21,7 @@ const STATUS_STYLES = {
   Decommissioned: { bg: "bg-rose-50",    text: "text-rose-600",    border: "border-rose-200"   },
 };
 
-const CATEGORY_COLORS = ["blue", "emerald", "amber", "violet", "rose", "slate", "teal"];
+const CATEGORY_COLORS = ["blue", "emerald", "amber", "violet", "rose", "slate", "teal"] as const;
 const CAT_BG = {
   blue:    "bg-blue-600",
   emerald: "bg-emerald-600",
@@ -35,6 +35,7 @@ const CAT_BG = {
 type FuelType = typeof FUEL_TYPES[number];
 type VehicleStatus = typeof STATUSES[number];
 type VehicleCategory = typeof CATEGORIES[number];
+type CategoryColor = typeof CATEGORY_COLORS[number];
 
 type Vehicle = {
   id: string;
@@ -86,7 +87,7 @@ const SEED_VEHICLES = [
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
 
-function catColor(cat: string): string {
+function catColor(cat: string): CategoryColor {
   const idx = CATEGORIES.indexOf(cat as VehicleCategory);
   return CATEGORY_COLORS[idx >= 0 ? idx % CATEGORY_COLORS.length : 0] || "slate";
 }
@@ -109,6 +110,10 @@ function dateStatus(dateStr?: string | null): VehicleAlertSeverity | "ok" | null
   return "ok";
 }
 
+function isAlertStatus(status: ReturnType<typeof dateStatus>): status is VehicleAlertSeverity {
+  return status === "expired" || status === "critical";
+}
+
 // Build the deduplicated alert list for a set of vehicles, respecting dismissed IDs
 function buildAlerts(vehicles: Vehicle[], dismissed: Set<string>): VehicleAlert[] {
   const alerts: VehicleAlert[] = [];
@@ -117,12 +122,14 @@ function buildAlerts(vehicles: Vehicle[], dismissed: Set<string>): VehicleAlert[
     const reg = dateStatus(v.regExp);
     const insId = `${v.id}-ins-${ins === "expired" ? "exp" : "crit"}`;
     const regId = `${v.id}-reg-${reg === "expired" ? "exp" : "crit"}`;
+    const insDays = daysUntil(v.insuranceExp);
+    const regDays = daysUntil(v.regExp);
 
-    if ((ins === "expired" || ins === "critical") && !dismissed.has(insId)) {
-      alerts.push({ id: insId, vehicle: v, type: "insurance", label: "Insurance",    severity: ins, days: daysUntil(v.insuranceExp) });
+    if (isAlertStatus(ins) && insDays !== null && !dismissed.has(insId)) {
+      alerts.push({ id: insId, vehicle: v, type: "insurance", label: "Insurance",    severity: ins, days: insDays });
     }
-    if ((reg === "expired" || reg === "critical") && !dismissed.has(regId)) {
-      alerts.push({ id: regId, vehicle: v, type: "reg",       label: "Registration", severity: reg, days: daysUntil(v.regExp) });
+    if (isAlertStatus(reg) && regDays !== null && !dismissed.has(regId)) {
+      alerts.push({ id: regId, vehicle: v, type: "reg",       label: "Registration", severity: reg, days: regDays });
     }
   });
   // expired first, then by days ascending
@@ -145,6 +152,7 @@ function DateChip({ dateStr, label }: { dateStr?: string | null; label: string }
     critical: "bg-amber-50 text-amber-700 border-amber-200",
     ok:       "bg-slate-50 text-slate-500 border-slate-200",
   };
+  if (!s) return <span className="text-[11px] text-slate-300">—</span>;
   const icon = s === "expired" ? "⛔" : s === "critical" ? "⚠" : "✓";
 
   return (
@@ -157,7 +165,7 @@ function DateChip({ dateStr, label }: { dateStr?: string | null; label: string }
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const c = STATUS_STYLES[status] || STATUS_STYLES.Inactive;
+  const c = STATUS_STYLES[status as VehicleStatus] || STATUS_STYLES.Inactive;
   return (
     <span className={`inline-flex items-center text-[10px] px-2 py-0.5 rounded-full font-semibold border ${c.bg} ${c.text} ${c.border}`}>
       ● {status}
@@ -304,8 +312,18 @@ function ConfirmDelete({ open, onClose, onConfirm, name }: { open: boolean; onCl
 
 // ── Vehicle Form ──────────────────────────────────────────────────────────────
 
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5 tracking-wider">{label}</label>
+      {children}
+    </div>
+  );
+}
+
 function VehicleForm({ initial, onSubmit, onCancel }: { initial?: Vehicle | null; onSubmit: (data: Vehicle) => void | Promise<void>; onCancel: () => void }) {
   const empty: Vehicle = {
+    id: "",
     regNo: "", make: "", model: "", year: new Date().getFullYear(),
     color: "", fuel: "Petrol", category: "Car", status: "Active",
     insuranceExp: "", regExp: "", notes: "",
@@ -316,13 +334,6 @@ function VehicleForm({ initial, onSubmit, onCancel }: { initial?: Vehicle | null
 
   const inputCls =
     "w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white text-slate-700";
-
-  const Field = ({ label, children }: { label: string; children: ReactNode }) => (
-    <div>
-      <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5 tracking-wider">{label}</label>
-      {children}
-    </div>
-  );
 
   const dateHint = (key: "insuranceExp" | "regExp") => {
     const s = dateStatus(form[key]);
@@ -459,10 +470,10 @@ function VehicleDrawer({ vehicle, onClose, onEdit }: { vehicle: Vehicle; onClose
           <section>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Vehicle Details</p>
             <div className="space-y-2 text-[12px]">
-              {[
+              {([
                 [<Fuel size={11} />, "Fuel",  vehicle.fuel],
                 [<Hash size={11} />, "Color", vehicle.color || "—"],
-              ].map(([icon, label, value]) => (
+              ] as Array<[ReactNode, string, ReactNode]>).map(([icon, label, value]) => (
                 <div key={label} className="flex justify-between items-center">
                   <span className="flex items-center gap-1.5 text-slate-400">{icon}{label}</span>
                   <span className="font-medium text-slate-700">{value}</span>
@@ -520,7 +531,11 @@ export default function VehicleRegistration() {
   const [target, setTarget]             = useState<Vehicle | null>(null);
   const [drawer, setDrawer]             = useState<Vehicle | null>(null);
 
-  const dismissAlert = (id: string) => setDismissed((prev) => new Set([...prev, id]));
+  const dismissAlert = (id: string) => setDismissed((prev) => {
+    const next = new Set(prev);
+    next.add(id);
+    return next;
+  });
 
   const filtered = vehicles.filter((v) => {
     const q = search.toLowerCase();
@@ -693,9 +708,7 @@ export default function VehicleRegistration() {
                 filtered.map((v) => {
                   const col      = catColor(v.category);
                   const avatarBg = CAT_BG[col] || "bg-slate-500";
-                  const rowAlert =
-                    ["expired", "critical"].includes(dateStatus(v.insuranceExp)) ||
-                    ["expired", "critical"].includes(dateStatus(v.regExp));
+                  const rowAlert = isAlertStatus(dateStatus(v.insuranceExp)) || isAlertStatus(dateStatus(v.regExp));
 
                   return (
                     <tr
