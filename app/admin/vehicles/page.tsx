@@ -553,7 +553,7 @@ export default function VehicleRegistration() {
     const load = async () => {
       try {
         const v = await apiFetch('/vehicles');
-        if (Array.isArray(v)) setVehicles(v.map((x: any) => ({ id: x.id, regNo: x.regNo || x.registration || '', make: x.make || '', model: x.model || '', year: x.year || '', color: x.color || '', fuel: x.fuel || '', category: x.category || 'Other', status: x.status || 'Active', insuranceExp: x.insuranceExp ? x.insuranceExp.split('T')[0] : '', regExp: x.regExp ? x.regExp.split('T')[0] : '', notes: x.notes || '' })));
+        if (Array.isArray(v)) setVehicles(v.map((x: any) => ({ id: x.id, regNo: x.registrationNo || x.regNo || x.registration || '', make: x.make || '', model: x.model || '', year: x.year || '', color: x.color || '', fuel: x.fuelType || x.fuel || '', category: x.category || 'Other', status: x.status || 'Active', insuranceExp: x.insuranceExpiry ? x.insuranceExpiry.split('T')[0] : x.insuranceExp ? x.insuranceExp.split('T')[0] : '', regExp: x.registrationExpiry ? x.registrationExpiry.split('T')[0] : x.regExp ? x.regExp.split('T')[0] : '', notes: x.notes || '' })));
       } catch (err) {
         console.warn('Load vehicles failed, using seed', err);
       }
@@ -580,7 +580,7 @@ export default function VehicleRegistration() {
   const create = async (data: Vehicle) => {
     try {
       const payload = normalizeVehiclePayload(data);
-      const created = await apiFetch('/vehicles', { method: 'POST', body: JSON.stringify(payload) }).catch(() => null);
+      const created = await apiFetch('/vehicles', { method: 'POST', body: JSON.stringify(payload) });
       if (created) setVehicles((prev) => [{ id: created.id, regNo: created.registrationNo || created.regNo, make: created.make, model: created.model, year: created.year, color: created.color, fuel: created.fuelType || created.fuel, category: created.category, status: created.status, insuranceExp: created.insuranceExpiry ? created.insuranceExpiry.split('T')[0] : '', regExp: created.registrationExpiry ? created.registrationExpiry.split('T')[0] : '', notes: created.notes || '' }, ...prev]);
     } catch (err) {
       console.error('Create vehicle failed', err);
@@ -592,7 +592,7 @@ export default function VehicleRegistration() {
     try {
       if (!target) return;
       const payload = normalizeVehiclePayload(data);
-      const updated = await apiFetch(`/vehicles/${target.id}`, { method: 'PUT', body: JSON.stringify(payload) }).catch(() => null);
+      const updated = await apiFetch(`/vehicles/${target.id}`, { method: 'PUT', body: JSON.stringify(payload) });
       if (updated) setVehicles((prev) => prev.map((v) => (v.id === target.id ? { ...v, ...data } : v)));
     } catch (err) {
       console.error('Update vehicle failed', err);
@@ -604,7 +604,7 @@ export default function VehicleRegistration() {
   const remove = async () => {
     try {
       if (!target) return;
-      await apiFetch(`/vehicles/${target.id}`, { method: 'DELETE' }).catch(() => null);
+      await apiFetch(`/vehicles/${target.id}`, { method: 'DELETE' });
       setVehicles((prev) => prev.filter((v) => v.id !== target.id));
     } catch (err) {
       console.error('Delete vehicle failed', err);
