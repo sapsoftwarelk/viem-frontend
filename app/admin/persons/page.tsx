@@ -176,21 +176,110 @@ function PersonForm({ initial, onSubmit, onCancel, positions }: { initial?: Pers
       status: "active",
     }
   );
-  const set = (k: keyof PersonFormData, v: string) => setForm((f) => ({ ...f, [k]: v }));
-  const valid = form.name.trim() && form.empId.trim() && form.positionId;
+  const validateField = (field: keyof PersonFormData, value: string): string => {
+    let error = "";
 
+    switch (field) {
+      case "name":
+        if (!value.trim()) {
+          error = "Full Name is required";
+        } else if (value.trim().length < 3) {
+          error = "Name must be at least 3 characters";
+        }
+        break;
+
+      case "empId":
+        if (!value.trim()) {
+          error = "Employee ID is required";
+        } else if (!/^EMP-\d{4,}$/i.test(value)) {
+          error = "Format should be EMP-0001";
+        }
+        break;
+
+      case "email":
+        if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+          error = "Invalid email address";
+        }
+        break;
+
+      case "phone":
+        if (
+          value &&
+          !/^(\+94|0)(70|71|72|74|75|76|77|78)[0-9]{7}$/.test(value.replace(/\s/g, ""))
+        ) {
+          error = "Invalid phone number";
+        }
+        break;
+
+      case "joinDate":
+        if (!value) {
+          error = "Join Date is required";
+        }
+        break;
+    }
+
+    return error;
+  };
+
+const set = (
+  field: keyof PersonFormData,
+  value: string
+) => {
+  setForm((prev) => ({
+    ...prev,
+    [field]: value,
+  }));
+
+  const error = validateField(field, value);
+
+  setErrors((prev) => ({
+    ...prev,
+    [field]: error,
+  }));
+};
+  const valid = form.name.trim() && form.empId.trim() && form.positionId;
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const validate = () => {
+    const newErrors: Record<string, string> = {};
+
+    const nameErr = validateField("name", form.name);
+    if (nameErr) newErrors.name = nameErr;
+
+    const empErr = validateField("empId", form.empId);
+    if (empErr) newErrors.empId = empErr;
+
+    const emailErr = validateField("email", form.email || "");
+    if (emailErr) newErrors.email = emailErr;
+
+    const phoneErr = validateField("phone", form.phone || "");
+    if (phoneErr) newErrors.phone = phoneErr;
+
+    const joinErr = validateField("joinDate", form.joinDate || "");
+    if (joinErr) newErrors.joinDate = joinErr;
+
+    if (!form.positionId) {
+      newErrors.positionId = "Position is required";
+    }
+
+    setErrors(newErrors);
+
+    return Object.keys(newErrors).length === 0;
+  };
   return (
     <div className="p-6 space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2">
           <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5">Full Name *</label>
           <input value={form.name} onChange={e=>set("name",e.target.value)} placeholder="John Doe"
-            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-400"/>
+            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-400" />
+          {errors.name && <p className="text-red-500 text-[11px] mt-1">{errors.name}</p>}
         </div>
         <div>
           <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5">EMP ID *</label>
           <input value={form.empId} onChange={e=>set("empId",e.target.value)} placeholder="EMP-0008"
             className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] font-mono focus:outline-none focus:ring-2 focus:ring-blue-400"/>
+          {errors.empId && <p className="text-red-500 text-[11px] mt-1">{errors.empId}</p>}
         </div>
         <div>
           <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5">Status</label>
@@ -211,11 +300,14 @@ function PersonForm({ initial, onSubmit, onCancel, positions }: { initial?: Pers
           <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5">Email</label>
           <input value={form.email} onChange={e=>set("email",e.target.value)} placeholder="email@company.lk" type="email"
             className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-400"/>
+           {errors.email && <p className="text-red-500 text-[11px] mt-1">{errors.email}</p>}
+
         </div>
         <div>
           <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5">Phone</label>
-          <input value={form.phone} onChange={e=>set("phone",e.target.value)} placeholder="+94 77 000 0000"
+          <input value={form.phone} inputMode="numeric" pattern="\d*" onChange={e=>set("phone", e.target.value.replace(/\D/g, ""))} placeholder="770000000"
             className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-400"/>
+           {errors.phone && <p className="text-red-500 text-[11px] mt-1">{errors.phone}</p>}
         </div>
         <div className="col-span-2">
           <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5">Join Date</label>
@@ -225,7 +317,12 @@ function PersonForm({ initial, onSubmit, onCancel, positions }: { initial?: Pers
       </div>
       <div className="flex gap-3 pt-1">
         <button onClick={onCancel} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-[13px] font-semibold text-slate-600 hover:bg-slate-50">Cancel</button>
-        <button onClick={()=>valid&&onSubmit(form)} disabled={!valid}
+        <button
+  onClick={() => {
+    if (validate()) {
+      onSubmit(form);
+    }
+  }} disabled={!valid}
           className={`flex-1 py-2.5 rounded-xl text-white text-[13px] font-semibold ${valid?"bg-blue-600 hover:bg-blue-700":"bg-blue-300 cursor-not-allowed"}`}>
           {initial ? "Save Changes" : "Create Person"}
         </button>
