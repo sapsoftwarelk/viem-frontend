@@ -260,15 +260,28 @@ function generateItemId(type, catCode, date) {
   return `ITEM-${uid()}`;
 }
 
-function getCategoryList(type) {
+function getDynamicCategoryList(type, subCategories = []) {
+  if (!Array.isArray(subCategories) || subCategories.length === 0) return [];
+  const slug = type === "Tool" ? "tools" : type === "Reusable" ? "reusable" : type === "Consumable" ? "consumable" : null;
+  if (!slug) return [];
+  return subCategories
+    .filter((c) => c.category?.slug === slug)
+    .map((c) => ({ code: c.code, label: c.name, id: c.id }));
+}
+
+function getCategoryList(type, subCategories = []) {
+  const dynamic = getDynamicCategoryList(type, subCategories);
+  if (dynamic.length > 0) return dynamic;
   if (type === "Tool")       return TOOL_CATEGORIES;
   if (type === "Reusable")   return REUSABLE_CATEGORIES;
   if (type === "Consumable") return CONSUMABLE_CATEGORIES;
   return [];
 }
 
-function getCategoryByCode(type, code) {
-  return getCategoryList(type).find((c) => c.code === code) || null;
+function getCategoryByCode(type, code, subCategories = []) {
+  const dynamic = getCategoryList(type, subCategories).find((c) => c.code === code);
+  const fallback = getCategoryList(type).find((c) => c.code === code);
+  return dynamic ? { ...fallback, ...dynamic } : fallback || null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -480,7 +493,7 @@ function Field({ label, children, span = 1 }) {
   );
 }
 
-function ItemForm({ initial, onSubmit, onCancel }) {
+function ItemForm({ initial, onSubmit, onCancel, subCategories = [] }) {
   const defaultForm = {
     type: "Tool",
     categoryCode: "CUT",
@@ -509,8 +522,8 @@ function ItemForm({ initial, onSubmit, onCancel }) {
     set("meta", {});
   };
 
-  const catList = getCategoryList(form.type);
-  const catObj  = getCategoryByCode(form.type, form.categoryCode);
+  const catList = getCategoryList(form.type, subCategories);
+  const catObj  = getCategoryByCode(form.type, form.categoryCode, subCategories);
   const isReusable   = form.type === "Reusable";
   const isConsumable = form.type === "Consumable";
   const isTool       = form.type === "Tool";
@@ -1101,10 +1114,10 @@ export default function ItemRegistration() {
 
       {/* Modals */}
       <Modal open={modal === "create"} onClose={() => setModal(null)} title="Register New Item">
-        <ItemForm onSubmit={create} onCancel={() => setModal(null)} />
+        <ItemForm subCategories={subCategories} onSubmit={create} onCancel={() => setModal(null)} />
       </Modal>
       <Modal open={modal === "edit"} onClose={() => setModal(null)} title="Edit Item">
-        {target && <ItemForm initial={target} onSubmit={update} onCancel={() => setModal(null)} />}
+        {target && <ItemForm initial={target} subCategories={subCategories} onSubmit={update} onCancel={() => setModal(null)} />}
       </Modal>
       <ConfirmDelete
         open={modal === "delete"}

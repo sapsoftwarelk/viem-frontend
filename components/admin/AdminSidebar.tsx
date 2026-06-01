@@ -129,6 +129,13 @@ const navSections: { label: string; items: NavItem[] }[] = [
           "Manage all inventory items, assets, categories, and stock levels.",
       },
       {
+        label: "Subcategories",
+        shortName: "SUB",
+        href: "/admin/sub-categories",
+        icon: BrickWall,
+        tooltip: "Create and review inventory subcategories used in item registration.",
+      },
+      {
         label: "Persons & Assign Roles",
         shortName: "PRS",
         href: "/admin/persons",
