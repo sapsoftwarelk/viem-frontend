@@ -12,11 +12,31 @@ import Badge from "@/components/shared/Badge";
 const pad = (n: number, width = 4) => String(n).padStart(width, "0");
 
 const REGIONS = [
-  "Ampara", "Anuradhapura", "Badulla", "Batticaloa", "Colombo", "Galle",
-  "Gampaha", "Hambantota", "Jaffna", "Kalutara", "Kandy", "Kegalle",
-  "Kilinochchi", "Kurunegala", "Mannar", "Matale", "Matara", "Monaragala",
-  "Mullaitivu", "Nuwara Eliya", "Polonnaruwa", "Puttalam", "Ratnapura",
-  "Trincomalee", "Vavuniya",
+  "Ampara",
+  "Anuradhapura",
+  "Badulla",
+  "Batticaloa",
+  "Colombo",
+  "Galle",
+  "Gampaha",
+  "Hambantota",
+  "Jaffna",
+  "Kalutara",
+  "Kandy",
+  "Kegalle",
+  "Kilinochchi",
+  "Kurunegala",
+  "Mannar",
+  "Matale",
+  "Matara",
+  "Monaragala",
+  "Mullaitivu",
+  "Nuwara Eliya",
+  "Polonnaruwa",
+  "Puttalam",
+  "Ratnapura",
+  "Trincomalee",
+  "Vavuniya",
 ];
 
 const STATUS_STYLES: Record<string, "green" | "amber" | "gray" | "blue" | "red"> = {
