@@ -213,7 +213,7 @@ export default function AdminDashboard() {
                   <p className="text-[12px] font-bold text-gray-900 truncate">{p.name}</p>
                   <p className="text-[11px] text-gray-500 truncate">{p.role}</p>
                 </div>
-                <Badge variant={p.color === "gray" ? "gray" : p.color as any}>{p.badge}</Badge>
+                <Badge variant={p.color}>{p.badge}</Badge>
               </div>
             ))}
           </div>

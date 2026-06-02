@@ -36,6 +36,15 @@ interface ReturnItem {
   condition: "Good" | "Minor Damage" | "Damaged" | "Wrong Item";
 }
 
+type InventoryStock = Record<string, number>;
+
+interface InventoryItem {
+  id: string;
+  name: string;
+  unit: string;
+  siteStock: InventoryStock;
+}
+
 interface SiteReturnNote {
   id: string;
   returnNumber: string;
@@ -80,7 +89,7 @@ const SUPPLIERS = [
   { id: "sup3", name: "Hardware Lanka (Pvt) Ltd" },
 ];
 
-const INVENTORY_ITEMS = [
+const INVENTORY_ITEMS: InventoryItem[] = [
   { id: "item1", name: "OPC Cement 50kg", unit: "Bags", siteStock: { site1: 250, site2: 100, site3: 50 } },
   { id: "item2", name: "T12 Rebar", unit: "kg", siteStock: { site1: 1200, site2: 800, site3: 400 } },
   { id: "item3", name: "Scaffolding Frame", unit: "frames", siteStock: { site1: 45, site2: 30, site3: 20 } },
@@ -397,7 +406,7 @@ function ReturnNoteModal({ open, onClose, onSave, initial }: any) {
 // RETURN NOTE DETAIL DRAWER
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ReturnNoteDrawer({ note, onClose, onUpdateStatus }: any) {
+function ReturnNoteDrawer({ note, onClose, onUpdateStatus }: { note: SiteReturnNote; onClose: () => void; onUpdateStatus: (id: string, status: ReturnStatus) => void }) {
   return (
     <div className="fixed inset-0 z-40 flex justify-end" onClick={onClose}>
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />

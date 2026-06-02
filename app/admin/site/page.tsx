@@ -176,8 +176,15 @@ function SubLevelModal({ title, initial, onClose, onSave }: any) {
     status: "Planning",
     remarks: "",
   });
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const handleChange = (field: string, value: any) => setForm({ ...form, [field]: value });
+  const handleChange = (field: string, value: any) => {
+    setForm({
+      ...form,
+      [field]: value,
+    });
+  };
+
   const isValid = form.name.trim();
 
   return (
@@ -226,9 +233,38 @@ function SiteFormModal({ onClose, onSave, initial, isEdit = false }: any) {
     status: "Planning",
     remarks: "",
   });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+ const handleChange = (field: string, value: any) => {
+  if (field === "contactNumber") {
+    // allow only numbers
+    value = value.replace(/\D/g, "").slice(0, 10);
+  }
 
-  const handleChange = (field: string, value: any) => setForm({ ...form, [field]: value });
-  const isValid = form.name.trim() && form.client.trim();
+  setForm({
+    ...form,
+    [field]: value,
+  });
+
+  if (field === "contactNumber") {
+    let error = "";
+
+    if (!value) {
+      error = "Contact Number is required";
+    } else if (value.length !== 10) {
+      error = "Contact Number must contain exactly 10 digits";
+    }
+
+    setErrors((prev) => ({
+      ...prev,
+      contactNumber: error,
+    }));
+  }
+};
+  const isValid =
+  form.name.trim() &&
+  form.client.trim() &&
+  /^\d{10}$/.test(form.contactNumber);
 
   return (
     <Modal title={isEdit ? "Edit Main Site" : "Register New Main Site"} onClose={onClose}>
@@ -239,14 +275,59 @@ function SiteFormModal({ onClose, onSave, initial, isEdit = false }: any) {
           <div><label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Status</label><select value={form.status} onChange={(e) => handleChange("status", e.target.value)} className="w-full border rounded-xl px-4 py-2.5 text-sm">{Object.keys(STATUS_STYLES).map(s => <option key={s}>{s}</option>)}</select></div>
         </div>
         <div><label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Client *</label><input value={form.client} onChange={(e) => handleChange("client", e.target.value)} className="w-full border rounded-xl px-4 py-2.5 text-sm" /></div>
-        <div><label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Contact Number</label><input value={form.contactNumber} onChange={(e) => handleChange("contactNumber", e.target.value)} className="w-full border rounded-xl px-4 py-2.5 text-sm" /></div>
+        <div><label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Contact Number</label><input type="tel"
+  value={form.contactNumber}
+  onChange={(e) =>
+    handleChange(
+      "contactNumber",
+      e.target.value
+    )
+  }
+  onBlur={() =>
+    setTouched((prev) => ({
+      ...prev,
+      contactNumber: true,
+    }))
+  }
+  inputMode="numeric"
+  maxLength={10}
+  placeholder="0771234567"
+  className={`w-full border rounded-xl px-4 py-2.5 text-sm ${
+    touched.contactNumber &&
+    errors.contactNumber
+      ? "border-red-500"
+      : ""
+  }`}
+/>
+
+{touched.contactNumber &&
+  errors.contactNumber && (
+    <p className="mt-1 text-xs text-red-500">
+      {errors.contactNumber}
+    </p>
+)}</div>
         <div><label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Address</label><input value={form.address} onChange={(e) => handleChange("address", e.target.value)} className="w-full border rounded-xl px-4 py-2.5 text-sm" /></div>
         <div><label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Start Date</label><input type="date" value={form.startDate} onChange={(e) => handleChange("startDate", e.target.value)} className="w-full border rounded-xl px-4 py-2.5 text-sm" /></div>
         <div><label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Remarks</label><textarea rows={2} value={form.remarks} onChange={(e) => handleChange("remarks", e.target.value)} className="w-full border rounded-xl px-4 py-2.5 text-sm resize-none" /></div>
       </div>
       <div className="flex justify-end gap-3 mt-6 pt-2">
         <button onClick={onClose} className="btn">Cancel</button>
-        <button onClick={() => isValid && onSave(form)} className="btn btn-primary">{isEdit ? "Save Changes" : "Register Site"}</button>
+        <button
+  onClick={() => {
+    setTouched((prev) => ({
+      ...prev,
+      contactNumber: true,
+    }));
+
+    if (isValid) {
+      onSave(form);
+    }
+  }}
+  disabled={!isValid}
+  className={`btn btn-primary ${
+    !isValid ? "opacity-50 cursor-not-allowed" : ""
+  }`}
+>{isEdit ? "Save Changes" : "Register Site"}</button>
       </div>
     </Modal>
   );
