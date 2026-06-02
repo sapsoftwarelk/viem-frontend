@@ -13,7 +13,46 @@ import {
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ITEM_TYPES = ["Tool", "Reusable", "Consumable"];
+type ItemType = "Tool" | "Reusable" | "Consumable";
+
+type AnyRecord = Record<string, any>;
+
+interface SubCategory {
+  id?: string;
+  code: string;
+  name?: string;
+  category?: { slug?: string };
+  defaultPieces?: number;
+  unit?: string;
+  individualTracking?: boolean;
+  fields?: string[];
+}
+
+interface ItemFormData {
+  id?: string;
+  itemId?: string;
+  type: ItemType | string;
+  categoryCode: string;
+  categoryLabel?: string;
+  name: string;
+  description: string;
+  status: string;
+  quantity: number | string;
+  unit: string;
+  location: string;
+  supplier: string;
+  purchaseDate: string;
+  warrantyExp: string;
+  batchDate: string;
+  pieceCount: string | number;
+  individualTracking?: string;
+  bundleId?: string;
+  registeredDate?: string;
+  meta: AnyRecord;
+  [key: string]: any;
+}
+
+const ITEM_TYPES: ItemType[] = ["Tool", "Reusable", "Consumable"];
 
 const TOOL_CATEGORIES = [
   { code: "CUT", label: "Cutting Machines",       fields: ["maxHours","serialNo","bladeType"] },
@@ -48,9 +87,11 @@ const CONSUMABLE_CATEGORIES = [
   { code: "CONC", label: "Ready-mix Concrete",            unit: "Cubic metres" },
 ];
 
-const STATUS_OPTIONS = ["Active", "In Use", "Under Maintenance", "Retired", "Out of Stock"];
+const STATUS_OPTIONS = ["Active", "Available", "In Warehouse", "Ready", "On Site", "Returning", "Damaged", "Expired", "Depleted", "Under Maintenance", "Retired", "Out of Stock"] as const;
 
-const STATUS_STYLES = {
+type StatusOption = (typeof STATUS_OPTIONS)[number];
+
+const STATUS_STYLES: Record<string, { bg: string; text: string; border: string; dot: string }> = {
   "Active":            { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", dot: "bg-emerald-500" },
   "Available":         { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", dot: "bg-emerald-500" },
   "In Warehouse":      { bg: "bg-sky-50",     text: "text-sky-700",    border: "border-sky-200",    dot: "bg-sky-500"    },
@@ -65,7 +106,7 @@ const STATUS_STYLES = {
   "Out of Stock":      { bg: "bg-slate-100",  text: "text-slate-500",  border: "border-slate-200",  dot: "bg-slate-400"  },
 };
 
-const TYPE_STYLES = {
+const TYPE_STYLES: Record<string, { bg: string; text: string; border: string; icon: typeof Wrench; accent: string }> = {
   Tool:       { bg: "bg-violet-50", text: "text-violet-700", border: "border-violet-200", icon: Wrench,   accent: "#7c3aed" },
   Reusable:   { bg: "bg-teal-50",   text: "text-teal-700",   border: "border-teal-200",   icon: RefreshCw,accent: "#0f766e" },
   Consumable: { bg: "bg-orange-50", text: "text-orange-700", border: "border-orange-200", icon: Boxes,    accent: "#c2410c" },
@@ -77,11 +118,11 @@ const TYPE_STYLES = {
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
 
-function pad(n, len = 4) { return String(n).padStart(len, "0"); }
+function pad(n: string | number, len = 4): string { return String(n).padStart(len, "0"); }
 
-function todayStr() { return new Date().toISOString().slice(0, 10); }
+function todayStr(): string { return new Date().toISOString().slice(0, 10); }
 
-function formatDate(d) {
+function formatDate(d?: string | Date | null): string {
   return d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 }
 
@@ -104,77 +145,77 @@ const STATUS_DISPLAY = {
   INSPECTION: "Inspection",
 };
 
-function normalizeStatus(value) {
+function normalizeStatus(value?: string): string {
   if (!value) return "Active";
   const key = String(value).trim().toUpperCase();
-  return STATUS_DISPLAY[key] || value.replace(/_/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase());
+  return (STATUS_DISPLAY as Record<string, string>)[key] || value.replace(/_/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase());
 }
 
-function normalizeType(value) {
+function normalizeType(value?: string): ItemType {
   if (!value) return "Tool";
   const type = String(value).trim().toLowerCase();
   return type === "consumable" ? "Consumable" : type === "reusable" ? "Reusable" : "Tool";
 }
 
-function parseCategoryCode(item) {
-  if (item.subCategory?.code) return item.subCategory.code;
-  if (item.id?.startsWith("REUS-")) {
-    const parts = item.id.split("-");
+function parseCategoryCode(item: AnyRecord): string {
+  if (item?.subCategory?.code) return item.subCategory.code;
+  if (item?.id?.startsWith("REUS-")) {
+    const parts = String(item.id).split("-");
     return parts[1] || "REUS";
   }
-  if (item.id?.startsWith("CONS-")) {
-    const parts = item.id.split("-");
+  if (item?.id?.startsWith("CONS-")) {
+    const parts = String(item.id).split("-");
     return parts[1] || "CONS";
   }
-  if (item.id?.startsWith("TOOL-")) {
-    const parts = item.id.split("-");
+  if (item?.id?.startsWith("TOOL-")) {
+    const parts = String(item.id).split("-");
     return parts[1] || "TOOL";
   }
   return "";
 }
 
-function getCategoryLabel(type, code) {
+function getCategoryLabel(type?: string, code?: string): string {
   const itemType = normalizeType(type);
   const category = getCategoryByCode(itemType, code);
   return category?.label || code || "Unknown";
 }
 
-function mapBackendItem(itemRecord) {
-  const item = itemRecord.item || itemRecord;
-  const type = normalizeType(itemRecord.type || item.type);
+function mapBackendItem(itemRecord: AnyRecord): ItemFormData {
+  const item = itemRecord?.item || itemRecord;
+  const type = normalizeType(itemRecord?.type || item?.type);
   const categoryCode = parseCategoryCode(item);
   const categoryLabel = getCategoryLabel(type, categoryCode);
   return {
-    id: item.id,
-    itemId: item.id,
+    id: String(item.id || item.itemId || uid()),
+    itemId: String(item.id || item.itemId || uid()),
     type,
     categoryCode,
     categoryLabel,
-    name: item.itemName || item.model || item.bundleId || item.id,
+    name: String(item.itemName || item.model || item.bundleId || item.id || ""),
     status: normalizeStatus(item.status),
-    location: item.location?.siteName || item.location?.siteName || item.location?.name || item.locationId || "",
-    supplier: item.supplier || "",
-    purchaseDate: item.purchaseDate ? item.purchaseDate.split("T")[0] : "",
-    warrantyExp: item.warrantyExpiry ? item.warrantyExpiry.split("T")[0] : "",
+    location: item?.location?.siteName || item?.location?.name || item?.locationId || "",
+    supplier: String(item.supplier || ""),
+    purchaseDate: item.purchaseDate ? String(item.purchaseDate).split("T")[0] : "",
+    warrantyExp: item.warrantyExpiry ? String(item.warrantyExpiry).split("T")[0] : "",
     quantity: item.quantity ?? item.pieceNum ?? item.pieceCount ?? 1,
-    unit: item.unit || (type === "Reusable" ? "pcs" : ""),
-    batchDate: item.batchDate ? item.batchDate.split("T")[0] : "",
+    unit: String(item.unit || (type === "Reusable" ? "pcs" : "")),
+    batchDate: item.batchDate ? String(item.batchDate).split("T")[0] : "",
     pieceCount: item.pieceCount ?? item.pieceNum ?? "",
-    registeredDate: item.receivedDate ? item.receivedDate.split("T")[0] : item.purchaseDate ? item.purchaseDate.split("T")[0] : todayStr(),
+    registeredDate: item.receivedDate ? String(item.receivedDate).split("T")[0] : item.purchaseDate ? String(item.purchaseDate).split("T")[0] : todayStr(),
     meta: {
       maxHours: item.maxHours || "",
       serialNo: item.serialNumber || "",
       bladeType: item.bladeType || "",
       ...item.meta,
     },
-    description: item.description || "",
+    description: String(item.description || ""),
   };
 }
 
-async function apiFetch(path, options = {}) {
-  const headers = {
+async function apiFetch(path: string, options: RequestInit = {}) {
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    ...(options.headers || {}),
+    ...((options.headers as Record<string, string>) || {}),
   };
 
   if (typeof window !== "undefined") {
@@ -196,10 +237,10 @@ async function apiFetch(path, options = {}) {
   return body;
 }
 
-function createItemPayload(form, subCategories) {
+function createItemPayload(form: ItemFormData, subCategories: SubCategory[]) {
   const subCategory = subCategories.find((cat) => cat.code === form.categoryCode);
 
-  const payload = {
+  const payload: AnyRecord = {
     type: form.type.toLowerCase(),
     subCategoryId: subCategory?.id,
     subCategoryCode: subCategory ? undefined : form.categoryCode,
@@ -236,13 +277,13 @@ function createItemPayload(form, subCategories) {
 }
 
 // Counters per category — used to auto-increment IDs
-const counters = {};
-function nextSeq(key) {
+const counters: Record<string, number> = {};
+function nextSeq(key: string): number {
   counters[key] = (counters[key] || 0) + 1;
   return counters[key];
 }
 
-function generateItemId(type, catCode, date) {
+function generateItemId(type: string, catCode: string, date?: string): string {
   if (type === "Tool") {
     const seq = nextSeq(`TOOL-${catCode}`);
     return `TOOL-${catCode}-${pad(seq)}`;
@@ -260,16 +301,16 @@ function generateItemId(type, catCode, date) {
   return `ITEM-${uid()}`;
 }
 
-function getDynamicCategoryList(type, subCategories = []) {
+function getDynamicCategoryList(type: string, subCategories: SubCategory[] = []): Array<Record<string, any>> {
   if (!Array.isArray(subCategories) || subCategories.length === 0) return [];
   const slug = type === "Tool" ? "tools" : type === "Reusable" ? "reusable" : type === "Consumable" ? "consumable" : null;
   if (!slug) return [];
   return subCategories
     .filter((c) => c.category?.slug === slug)
-    .map((c) => ({ code: c.code, label: c.name, id: c.id }));
+    .map((c) => ({ code: c.code, label: c.name || c.code, id: c.id }));
 }
 
-function getCategoryList(type, subCategories = []) {
+function getCategoryList(type: string, subCategories: SubCategory[] = []): Array<Record<string, any>> {
   const dynamic = getDynamicCategoryList(type, subCategories);
   if (dynamic.length > 0) return dynamic;
   if (type === "Tool")       return TOOL_CATEGORIES;
@@ -278,7 +319,7 @@ function getCategoryList(type, subCategories = []) {
   return [];
 }
 
-function getCategoryByCode(type, code, subCategories = []) {
+function getCategoryByCode(type: string, code?: string, subCategories: SubCategory[] = []): Record<string, any> | null {
   const dynamic = getCategoryList(type, subCategories).find((c) => c.code === code);
   const fallback = getCategoryList(type).find((c) => c.code === code);
   return dynamic ? { ...fallback, ...dynamic } : fallback || null;
@@ -290,7 +331,7 @@ function getCategoryByCode(type, code, subCategories = []) {
 // For production, swap canvas draw with a real QR library like qrcode.js
 // ─────────────────────────────────────────────────────────────────────────────
 
-function hashCode(str) {
+function hashCode(str: string): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < str.length; i++) {
     h ^= str.charCodeAt(i);
@@ -299,13 +340,14 @@ function hashCode(str) {
   return h;
 }
 
-function QRCanvas({ value, size = 120 }) {
-  const canvasRef = useRef(null);
+function QRCanvas({ value, size = 120, id }: { value: string; size?: number; id?: string }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !value) return;
     const ctx = canvas.getContext("2d");
+    if (!ctx) return;
     const N = 21; // 21×21 grid (QR version 1 style)
     const cell = Math.floor(size / N);
     const total = cell * N;
@@ -323,7 +365,7 @@ function QRCanvas({ value, size = 120 }) {
     const mod = Array.from({ length: N }, () => Array(N).fill(0));
 
     // Finder patterns (top-left, top-right, bottom-left)
-    const finder = (r, c) => {
+    const finder = (r: number, c: number) => {
       for (let i = 0; i < 7; i++) for (let j = 0; j < 7; j++) {
         const onBorder = i === 0 || i === 6 || j === 0 || j === 6;
         const onInner  = i >= 2 && i <= 4 && j >= 2 && j <= 4;
@@ -352,6 +394,7 @@ function QRCanvas({ value, size = 120 }) {
 
   return (
     <canvas
+      id={id}
       ref={canvasRef}
       style={{ display: "block", imageRendering: "pixelated" }}
       title={value}
@@ -359,16 +402,15 @@ function QRCanvas({ value, size = 120 }) {
   );
 }
 
-function QRModal({ open, item, onClose }) {
-  const canvasRef = useRef(null);
+function QRModal({ open, item, onClose }: { open: boolean; item: ItemFormData | null; onClose: () => void }) {
   if (!open || !item) return null;
 
   const downloadQR = () => {
     // find the canvas inside the modal
-    const canvas = document.querySelector("#qr-download-canvas");
+    const canvas = document.querySelector<HTMLCanvasElement>("#qr-download-canvas");
     if (!canvas) return;
     const link = document.createElement("a");
-    link.download = `${item.itemId}-QR.png`;
+    link.download = `${String(item.itemId)}-QR.png`;
     link.href = canvas.toDataURL("image/png");
     link.click();
   };
@@ -385,7 +427,7 @@ function QRModal({ open, item, onClose }) {
         </div>
         <div className="p-6 flex flex-col items-center gap-4">
           <div className="p-3 bg-white border-2 border-slate-200 rounded-xl">
-            <QRCanvas value={item.itemId} size={160} id="qr-download-canvas" />
+            <QRCanvas value={String(item.itemId)} size={160} id="qr-download-canvas" />
           </div>
           <div className="text-center">
             <p className="text-[13px] font-bold text-slate-800 font-mono">{item.itemId}</p>
@@ -412,7 +454,7 @@ function QRModal({ open, item, onClose }) {
 // BADGES
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TypeBadge({ type }) {
+function TypeBadge({ type }: { type: string }) {
   const s = TYPE_STYLES[type] || TYPE_STYLES.Tool;
   const Icon = s.icon;
   return (
@@ -422,7 +464,7 @@ function TypeBadge({ type }) {
   );
 }
 
-function StatusBadge({ status }) {
+function StatusBadge({ status }: { status: string }) {
   const s = STATUS_STYLES[status] || STATUS_STYLES["Active"];
   return (
     <span className={`inline-flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded-full font-semibold border ${s.bg} ${s.text} ${s.border}`}>
@@ -436,7 +478,7 @@ function StatusBadge({ status }) {
 // DYNAMIC METADATA FIELDS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const FIELD_LABELS = {
+const FIELD_LABELS: Record<string, string> = {
   maxHours:        "Max Hours",
   serialNo:        "Serial No.",
   bladeType:       "Blade Type",
@@ -458,7 +500,15 @@ const FIELD_LABELS = {
 
 const DATE_FIELDS = ["calibrationDate"];
 
-function MetaFields({ fields, values, onChange, inputCls }) {
+function MetaFields({ fields, values, onChange, inputCls, errors, touched, setTouched,}: {
+  fields?: string[];
+  values: AnyRecord;
+  onChange: (field: string, value: string) => void;
+  inputCls: string;
+  errors: Record<string, string>;
+  touched: Record<string, boolean>;
+  setTouched: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+}) {
   if (!fields || !fields.length) return null;
   return (
     <>
@@ -467,13 +517,40 @@ function MetaFields({ fields, values, onChange, inputCls }) {
           <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5 tracking-wider">
             {FIELD_LABELS[f] || f}
           </label>
-          <input
-            type={DATE_FIELDS.includes(f) ? "date" : "text"}
-            value={values[f] || ""}
-            onChange={(e) => onChange(f, e.target.value)}
-            placeholder={FIELD_LABELS[f] || f}
-            className={inputCls}
-          />
+          <>
+  <input
+    type={DATE_FIELDS.includes(f) ? "date" : "text"}
+    value={values[f] || ""}
+    onChange={(e) => {
+  let value = e.target.value;
+
+  if (f === "maxHours" || f === "serialNo") {
+    value = value.replace(/\D/g, "");
+  }
+
+  onChange(f, value);
+}}
+    onBlur={() =>
+      setTouched((prev) => ({
+        ...prev,
+        [f]: true,
+      }))
+    }
+    placeholder={FIELD_LABELS[f] || f}
+    className={`${inputCls}
+      ${
+        touched?.[f] && errors?.[f]
+          ? "border-red-500 focus:ring-red-400"
+          : ""
+      }`}
+  />
+
+  {touched?.[f] && errors?.[f] && (
+    <p className="mt-1 text-xs text-red-500">
+      {errors[f]}
+    </p>
+  )}
+</>
         </div>
       ))}
     </>
@@ -484,7 +561,7 @@ function MetaFields({ fields, values, onChange, inputCls }) {
 // ITEM FORM
 // ─────────────────────────────────────────────────────────────────────────────
 
-function Field({ label, children, span = 1 }) {
+function Field({ label, children, span = 1 }: { label: string; children: React.ReactNode; span?: number }) {
   return (
     <div className={span === 2 ? "col-span-2" : ""}>
       <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5 tracking-wider">{label}</label>
@@ -493,8 +570,13 @@ function Field({ label, children, span = 1 }) {
   );
 }
 
-function ItemForm({ initial, onSubmit, onCancel, subCategories = [] }) {
-  const defaultForm = {
+function ItemForm({ initial, onSubmit, onCancel, subCategories = [] }: {
+  initial?: Partial<ItemFormData>;
+  onSubmit: (data: ItemFormData) => void;
+  onCancel: () => void;
+  subCategories?: SubCategory[];
+}) {
+  const defaultForm: ItemFormData = {
     type: "Tool",
     categoryCode: "CUT",
     name: "",
@@ -510,12 +592,114 @@ function ItemForm({ initial, onSubmit, onCancel, subCategories = [] }) {
     pieceCount: "",
     meta: {},
   };
-  const [form, setForm] = useState(initial ? { ...defaultForm, ...initial } : defaultForm);
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-  const setMeta = (k, v) => setForm((f) => ({ ...f, meta: { ...f.meta, [k]: v } }));
+  const [form, setForm] = useState<ItemFormData>(
+    initial ? { ...defaultForm, ...initial } : defaultForm
+  );
+
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  const validateField = (field: string, value: string | number | undefined) => {
+    let error = "";
+
+    switch (field) {
+        case "maxHours":
+          if (!value) {
+            error = "Max Hours is required";
+          } else if (!/^\d+$/.test(String(value))) {
+            error = "Only numbers allowed";
+          } else if (Number(value) <= 0) {
+            error = "Must be greater than 0";
+          }
+          break;
+
+      case "serialNo":
+        if (!String(value || "").trim()) {
+          error = "Serial Number is required";
+        } else if (!/^\d+$/.test(String(value))) {
+          error = "Serial Number must contain numbers only";
+        } else if (String(value).length < 5) {
+          error = "Minimum 5 digits required";
+        }
+        break;
+    }
+
+    return error;
+  };
+
+  const set = (k: keyof ItemFormData, v: any) =>
+    setForm((f) => ({ ...f, [k]: v } as ItemFormData));
+
+  const setMeta = (k: string, v: string) => {
+    setForm((f) => ({
+      ...f,
+      meta: {
+        ...f.meta,
+        [k]: v,
+      },
+    } as ItemFormData));
+
+    const error = validateField(k, v);
+
+    setErrors((prev) => ({
+      ...prev,
+      [k]: error,
+    }));
+  };
+
+  const validateForm = (): boolean => {
+    const nextErrors: Record<string, string> = {};
+
+    if (!form.name?.trim()) {
+      nextErrors.name = "Item name is required";
+    }
+
+    if (!form.categoryCode) {
+      nextErrors.categoryCode = "Category is required";
+    }
+
+    if (form.type === "Tool") {
+      if (!form.quantity || Number(form.quantity) <= 0) {
+        nextErrors.quantity = "Quantity must be greater than 0";
+      }
+    }
+
+    if (form.type === "Reusable") {
+      if (!form.pieceCount || Number(form.pieceCount) <= 0) {
+        nextErrors.pieceCount = "Piece count must be greater than 0";
+      }
+    }
+
+    if (form.type === "Consumable") {
+      if (!form.batchDate) {
+        nextErrors.batchDate = "Batch date is required";
+      }
+      if (!form.unit?.trim()) {
+        nextErrors.unit = "Unit is required";
+      }
+      if (!form.quantity || Number(form.quantity) <= 0) {
+        nextErrors.quantity = "Quantity must be greater than 0";
+      }
+    }
+
+    (catObj?.fields || []).forEach((field: string) => {
+      const error = validateField(field, form.meta?.[field]);
+      if (error) {
+        nextErrors[field] = error;
+      }
+    });
+
+    setErrors(nextErrors);
+    setTouched((prev) => ({
+      ...prev,
+      ...Object.fromEntries(Object.keys(nextErrors).map((key) => [key, true])),
+    }));
+
+    return Object.keys(nextErrors).length === 0;
+  };
 
   // When type changes, reset category to first of that type
-  const handleTypeChange = (t) => {
+  const handleTypeChange = (t: ItemType) => {
     const cats = getCategoryList(t);
     set("type", t);
     set("categoryCode", cats[0]?.code || "");
@@ -528,12 +712,12 @@ function ItemForm({ initial, onSubmit, onCancel, subCategories = [] }) {
   const isConsumable = form.type === "Consumable";
   const isTool       = form.type === "Tool";
 
-  const valid = form.name.trim() && form.categoryCode;
+  const valid = Boolean(form.name.trim() && form.categoryCode);
 
   const inputCls = "w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white text-slate-700";
 
   const handleSubmit = () => {
-    if (!valid) return;
+    if (!validateForm()) return;
     const date = isConsumable ? form.batchDate : form.purchaseDate;
     const itemId = initial?.itemId || generateItemId(form.type, form.categoryCode, date || todayStr());
     const catLabel = catObj?.label || form.categoryCode;
@@ -568,16 +752,33 @@ function ItemForm({ initial, onSubmit, onCancel, subCategories = [] }) {
       <div className="grid grid-cols-2 gap-4">
         {/* Category */}
         <Field label="Category" span={2}>
-          <select value={form.categoryCode} onChange={(e) => { set("categoryCode", e.target.value); set("meta", {}); }} className={inputCls}>
+          <select
+            value={form.categoryCode}
+            onChange={(e) => { set("categoryCode", e.target.value); set("meta", {}); }}
+            onBlur={() => setTouched((prev) => ({ ...prev, categoryCode: true }))}
+            className={`${inputCls} ${touched.categoryCode && errors.categoryCode ? "border-red-500 focus:ring-red-400" : ""}`}
+          >
             {catList.map((c) => (
               <option key={c.code} value={c.code}>{c.code} — {c.label}</option>
             ))}
           </select>
+          {touched.categoryCode && errors.categoryCode ? (
+            <p className="mt-1 text-xs text-red-500">{errors.categoryCode}</p>
+          ) : null}
         </Field>
 
         {/* Name */}
         <Field label="Item Name *" span={2}>
-          <input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder={`e.g. ${catObj?.label || "Item name"}`} className={inputCls} />
+          <input
+            value={form.name}
+            onChange={(e) => set("name", e.target.value)}
+            onBlur={() => setTouched((prev) => ({ ...prev, name: true }))}
+            placeholder={`e.g. ${catObj?.label || "Item name"}`}
+            className={`${inputCls} ${touched.name && errors.name ? "border-red-500 focus:ring-red-400" : ""}`}
+          />
+          {touched.name && errors.name ? (
+            <p className="mt-1 text-xs text-red-500">{errors.name}</p>
+          ) : null}
         </Field>
 
         {/* Description */}
@@ -623,10 +824,14 @@ function ItemForm({ initial, onSubmit, onCancel, subCategories = [] }) {
               <input
                 value={form.pieceCount || catObj?.defaultPieces || ""}
                 onChange={(e) => set("pieceCount", e.target.value)}
+                onBlur={() => setTouched((prev) => ({ ...prev, pieceCount: true }))}
                 type="number" min="1"
                 placeholder={String(catObj?.defaultPieces || 1)}
-                className={inputCls}
+                className={`${inputCls} ${touched.pieceCount && errors.pieceCount ? "border-red-500 focus:ring-red-400" : ""}`}
               />
+              {touched.pieceCount && errors.pieceCount ? (
+                <p className="mt-1 text-xs text-red-500">{errors.pieceCount}</p>
+              ) : null}
             </Field>
             <Field label="Individual Tracking">
               <select value={form.individualTracking || (catObj?.individualTracking ? "Yes" : "No")} onChange={(e) => set("individualTracking", e.target.value)} className={inputCls}>
@@ -641,13 +846,42 @@ function ItemForm({ initial, onSubmit, onCancel, subCategories = [] }) {
         {isConsumable && (
           <>
             <Field label="Batch Date">
-              <input value={form.batchDate} onChange={(e) => set("batchDate", e.target.value)} type="date" className={inputCls} />
+              <input
+                value={form.batchDate}
+                onChange={(e) => set("batchDate", e.target.value)}
+                onBlur={() => setTouched((prev) => ({ ...prev, batchDate: true }))}
+                type="date"
+                className={`${inputCls} ${touched.batchDate && errors.batchDate ? "border-red-500 focus:ring-red-400" : ""}`}
+              />
+              {touched.batchDate && errors.batchDate ? (
+                <p className="mt-1 text-xs text-red-500">{errors.batchDate}</p>
+              ) : null}
             </Field>
             <Field label="Quantity">
-              <input value={form.quantity} onChange={(e) => set("quantity", e.target.value)} type="number" min="1" placeholder="Qty" className={inputCls} />
+              <input
+                value={form.quantity}
+                onChange={(e) => set("quantity", e.target.value)}
+                onBlur={() => setTouched((prev) => ({ ...prev, quantity: true }))}
+                type="number"
+                min="1"
+                placeholder="Qty"
+                className={`${inputCls} ${touched.quantity && errors.quantity ? "border-red-500 focus:ring-red-400" : ""}`}
+              />
+              {touched.quantity && errors.quantity ? (
+                <p className="mt-1 text-xs text-red-500">{errors.quantity}</p>
+              ) : null}
             </Field>
             <Field label={`Unit (${catObj?.unit || "unit"})`} span={2}>
-              <input value={form.unit || catObj?.unit || ""} onChange={(e) => set("unit", e.target.value)} placeholder={catObj?.unit || "Unit"} className={inputCls} />
+              <input
+                value={form.unit || catObj?.unit || ""}
+                onChange={(e) => set("unit", e.target.value)}
+                onBlur={() => setTouched((prev) => ({ ...prev, unit: true }))}
+                placeholder={catObj?.unit || "Unit"}
+                className={`${inputCls} ${touched.unit && errors.unit ? "border-red-500 focus:ring-red-400" : ""}`}
+              />
+              {touched.unit && errors.unit ? (
+                <p className="mt-1 text-xs text-red-500">{errors.unit}</p>
+              ) : null}
             </Field>
           </>
         )}
@@ -655,7 +889,17 @@ function ItemForm({ initial, onSubmit, onCancel, subCategories = [] }) {
         {/* Tool quantity */}
         {isTool && (
           <Field label="Quantity">
-            <input value={form.quantity} onChange={(e) => set("quantity", e.target.value)} type="number" min="1" className={inputCls} />
+            <input
+              value={form.quantity}
+              onChange={(e) => set("quantity", e.target.value)}
+              onBlur={() => setTouched((prev) => ({ ...prev, quantity: true }))}
+              type="number"
+              min="1"
+              className={`${inputCls} ${touched.quantity && errors.quantity ? "border-red-500 focus:ring-red-400" : ""}`}
+            />
+            {touched.quantity && errors.quantity ? (
+              <p className="mt-1 text-xs text-red-500">{errors.quantity}</p>
+            ) : null}
           </Field>
         )}
 
@@ -664,7 +908,15 @@ function ItemForm({ initial, onSubmit, onCancel, subCategories = [] }) {
           <div className="col-span-2 bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Tracked Metadata</p>
             <div className="grid grid-cols-2 gap-3">
-              <MetaFields fields={catObj.fields} values={form.meta} onChange={setMeta} inputCls={inputCls} />
+              <MetaFields
+  fields={catObj?.fields || []}
+  values={form.meta}
+  onChange={setMeta}
+  inputCls={inputCls}
+  errors={errors}
+  touched={touched}
+  setTouched={setTouched}
+/>
             </div>
           </div>
         )}
@@ -708,7 +960,7 @@ function ItemForm({ initial, onSubmit, onCancel, subCategories = [] }) {
 // DETAIL DRAWER
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ItemDrawer({ item, onClose, onEdit, onQR }) {
+function ItemDrawer({ item, onClose, onEdit, onQR }: { item: ItemFormData; onClose: () => void; onEdit: () => void; onQR: () => void }) {
   const ts = TYPE_STYLES[item.type] || TYPE_STYLES.Tool;
   const TypeIcon = ts.icon;
 
@@ -737,7 +989,7 @@ function ItemDrawer({ item, onClose, onEdit, onQR }) {
         {/* QR preview */}
         <div className="mx-5 mt-4 p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center gap-4">
           <div className="p-2 bg-white rounded-xl border border-slate-200">
-            <QRCanvas value={item.itemId} size={64} />
+            <QRCanvas value={String(item.itemId)} size={64} />
           </div>
           <div className="flex-1">
             <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Item QR Code</p>
@@ -756,17 +1008,19 @@ function ItemDrawer({ item, onClose, onEdit, onQR }) {
           <section>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Details</p>
             <div className="space-y-2 text-[12px]">
-              {[
-                ["Category", `${item.categoryCode} — ${item.categoryLabel}`],
-                ["Location", item.location || "—"],
-                ["Supplier", item.supplier || "—"],
-                ["Registered", formatDate(item.registeredDate)],
-                item.purchaseDate && ["Purchase Date", formatDate(item.purchaseDate)],
-                item.warrantyExp  && ["Warranty Exp.", formatDate(item.warrantyExp)],
-                item.quantity     && ["Quantity", `${item.quantity} ${item.unit || ""}`],
-                item.pieceCount   && ["Piece Count", item.pieceCount],
-                item.batchDate    && ["Batch Date", formatDate(item.batchDate)],
-              ].filter(Boolean).map(([label, value]) => (
+              {(
+                [
+                  ["Category", `${item.categoryCode} — ${item.categoryLabel}`],
+                  ["Location", item.location || "—"],
+                  ["Supplier", item.supplier || "—"],
+                  ["Registered", formatDate(item.registeredDate)],
+                  item.purchaseDate && ["Purchase Date", formatDate(item.purchaseDate)],
+                  item.warrantyExp  && ["Warranty Exp.", formatDate(item.warrantyExp)],
+                  item.quantity     && ["Quantity", `${item.quantity} ${item.unit || ""}`],
+                  item.pieceCount   && ["Piece Count", String(item.pieceCount)],
+                  item.batchDate    && ["Batch Date", formatDate(item.batchDate)],
+                ] as Array<[string, string] | false>
+              ).filter((entry): entry is [string, string] => Boolean(entry)).map(([label, value]) => (
                 <div key={label} className="flex justify-between items-start gap-3">
                   <span className="text-slate-400 flex-shrink-0">{label}</span>
                   <span className="font-medium text-slate-700 text-right">{value}</span>
@@ -780,10 +1034,10 @@ function ItemDrawer({ item, onClose, onEdit, onQR }) {
             <section>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Tracked Metadata</p>
               <div className="space-y-2 text-[12px]">
-                {Object.entries(item.meta).filter(([, v]) => v).map(([k, v]) => (
+                {Object.entries(item.meta as Record<string, any>).filter(([, v]) => v).map(([k, v]) => (
                   <div key={k} className="flex justify-between items-center">
                     <span className="text-slate-400">{FIELD_LABELS[k] || k}</span>
-                    <span className="font-medium text-slate-700 font-mono">{v}</span>
+                    <span className="font-medium text-slate-700 font-mono">{String(v)}</span>
                   </div>
                 ))}
               </div>
@@ -821,7 +1075,7 @@ function ItemDrawer({ item, onClose, onEdit, onQR }) {
 // MODAL SHELL + CONFIRM DELETE
 // ─────────────────────────────────────────────────────────────────────────────
 
-function Modal({ open, onClose, title, children, width = "max-w-xl" }) {
+function Modal({ open, onClose, title, children, width = "max-w-xl" }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; width?: string }) {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
@@ -836,7 +1090,7 @@ function Modal({ open, onClose, title, children, width = "max-w-xl" }) {
   );
 }
 
-function ConfirmDelete({ open, onClose, onConfirm, name }) {
+function ConfirmDelete({ open, onClose, onConfirm, name }: { open: boolean; onClose: () => void; onConfirm: () => void; name?: string }) {
   return (
     <Modal open={open} onClose={onClose} title="Confirm Delete" width="max-w-md">
       <div className="p-6">
@@ -873,16 +1127,16 @@ const SEED_ITEMS = [
 
 export default function ItemRegistration() {
   const router = useRouter();
-  const [items, setItems] = useState(SEED_ITEMS);
-  const [subCategories, setSubCategories] = useState([]);
+  const [items, setItems] = useState<ItemFormData[]>(SEED_ITEMS);
+  const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
   const [search, setSearch] = useState("");
-  const [filterType, setFilterType] = useState("all");
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [modal, setModal] = useState(null); // null | "create" | "edit" | "delete"
-  const [target, setTarget] = useState(null);
-  const [drawer, setDrawer] = useState(null);
-  const [qrItem, setQrItem] = useState(null);
-  const [apiError, setApiError] = useState("");
+  const [filterType, setFilterType] = useState<"all" | ItemType>("all");
+  const [filterStatus, setFilterStatus] = useState<"all" | string>("all");
+  const [modal, setModal] = useState<"create" | "edit" | "delete" | null>(null);
+  const [target, setTarget] = useState<ItemFormData | null>(null);
+  const [drawer, setDrawer] = useState<ItemFormData | null>(null);
+  const [qrItem, setQrItem] = useState<ItemFormData | null>(null);
+  const [apiError, setApiError] = useState<string>("");
   const [loading, setLoading] = useState(false);
 
   const handleAuthFailure = useCallback(() => {
@@ -922,7 +1176,7 @@ export default function ItemRegistration() {
     load();
   }, [handleAuthFailure]);
 
-  const create = async (data) => {
+  const create = async (data: ItemFormData) => {
     try {
       setLoading(true);
       setApiError("");
@@ -932,10 +1186,10 @@ export default function ItemRegistration() {
         body: JSON.stringify(payload),
       });
       const created = result;
-      const newItems = [];
+      const newItems: ItemFormData[] = [];
       if (created.item) {
         if (Array.isArray(created.item)) {
-          newItems.push(...created.item.map((item) => mapBackendItem({ type: created.type, item })));
+          newItems.push(...created.item.map((item: AnyRecord) => mapBackendItem({ type: created.type, item })));
         } else {
           newItems.push(mapBackendItem(created));
         }
@@ -957,12 +1211,20 @@ export default function ItemRegistration() {
     }
   };
 
-  const update = (data) => { setItems((p) => p.map((i) => (i.id === target.id ? { ...i, ...data } : i))); setModal(null); setDrawer(null); };
-  const remove = () => { setItems((p) => p.filter((i) => i.id !== target.id)); setModal(null); };
+  const update = (data: Partial<ItemFormData>) => {
+    setItems((p) => p.map((i) => (i.id === target?.id ? { ...i, ...data } : i)));
+    setModal(null);
+    setDrawer(null);
+  };
+  const remove = () => {
+    if (!target) return;
+    setItems((p) => p.filter((i) => i.id !== target.id));
+    setModal(null);
+  };
 
   const filtered = items.filter((item) => {
     const q = search.toLowerCase();
-    const ms = item.itemId.toLowerCase().includes(q) || item.name.toLowerCase().includes(q) || item.categoryCode.toLowerCase().includes(q) || item.categoryLabel.toLowerCase().includes(q);
+    const ms = String(item.itemId).toLowerCase().includes(q) || String(item.name).toLowerCase().includes(q) || String(item.categoryCode).toLowerCase().includes(q) || String(item.categoryLabel).toLowerCase().includes(q);
     const mt = filterType   === "all" || item.type   === filterType;
     const mst = filterStatus === "all" || item.status === filterStatus;
     return ms && mt && mst;
@@ -1025,7 +1287,7 @@ export default function ItemRegistration() {
               className="w-full pl-9 pr-3 py-2 text-[12px] border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 bg-slate-50"
             />
           </div>
-          <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className={selCls}>
+          <select value={filterType} onChange={(e) => setFilterType(e.target.value as "all" | ItemType)} className={selCls}>
             <option value="all">All Types</option>
             {ITEM_TYPES.map((t) => <option key={t}>{t}</option>)}
           </select>
