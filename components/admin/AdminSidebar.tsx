@@ -143,6 +143,13 @@ const navSections: { label: string; items: NavItem[] }[] = [
         tooltip: "Manage system users and assign roles.",
       },
       {
+        label: "Login Credentials",
+        shortName: "CRED",
+        href: "/admin/login-credentials",
+        icon: ShieldCheck,
+        tooltip: "Create and manage login credentials for selected employees.",
+      },
+      {
         label: "Job Positions",
         shortName: "POS",
         href: "/admin/positions",

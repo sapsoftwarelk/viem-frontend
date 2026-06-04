@@ -152,6 +152,77 @@ function ConfirmDelete({ open, onClose, onConfirm, name }: { open: boolean; onCl
   );
 }
 
+function CreateCredentialsModal({ open, onClose, person, positions }: { open: boolean; onClose: () => void; person: PersonItem | null; positions: PositionItem[] }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [roleId, setRoleId] = useState<string>(positions[0]?.id || "");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setUsername(""); setPassword(""); setError(null);
+      setRoleId(positions[0]?.id || "");
+    }
+  }, [open, positions]);
+
+  const submit = async () => {
+    if (!person) return;
+    if (!username.trim() || !password) {
+      setError("Username and password are required");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const payload = {
+        username: username.trim(),
+        password,
+        employeeId: person.id, // use `id` (employee PK)
+        roleId: roleId || person.positionId,
+      };
+      await apiFetch("/users", { method: "POST", body: JSON.stringify(payload) });
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Manage Credentials — ${person?.name || ""}`}>
+      <div className="p-6 space-y-4">
+        <div>
+          <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5">Username</label>
+          <input value={username} onChange={(e)=>setUsername(e.target.value)} placeholder="username"
+            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none" />
+        </div>
+        <div>
+          <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5">Password</label>
+          <input value={password} onChange={(e)=>setPassword(e.target.value)} placeholder="password" type="password"
+            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none" />
+        </div>
+        <div>
+          <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5">Role</label>
+          <select value={roleId} onChange={(e)=>setRoleId(e.target.value)}
+            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none bg-white">
+            {positions.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+          </select>
+        </div>
+        {error && <p className="text-rose-600 text-[13px]">{error}</p>}
+        <div className="flex gap-3 pt-1">
+          <button onClick={onClose} disabled={loading} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-[13px] font-semibold text-slate-600 hover:bg-slate-50">Cancel</button>
+          <button onClick={submit} disabled={loading} className="flex-1 py-2.5 rounded-xl text-white text-[13px] font-semibold bg-blue-600 hover:bg-blue-700">{loading?"Saving...":"Save Credentials"}</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // PERSONS CRUD
 // ══════════════════════════════════════════════════════════════════════════════
@@ -331,7 +402,7 @@ const set = (
   );
 }
 
-function PersonDetailDrawer({ person, onClose, onEdit, positions, tasks }: { person: PersonItem; onClose: () => void; onEdit: () => void; positions: PositionItem[]; tasks: TaskItem[] }) {
+function PersonDetailDrawer({ person, onClose, onEdit, onManageCredentials, positions, tasks }: { person: PersonItem; onClose: () => void; onEdit: () => void; onManageCredentials: () => void; positions: PositionItem[]; tasks: TaskItem[] }) {
   const pos = positions.find((p) => p.id === person.positionId);
   const assignedTasks = tasks.filter((t) => pos?.taskIds?.includes(t.id));
   return (
@@ -388,10 +459,14 @@ function PersonDetailDrawer({ person, onClose, onEdit, positions, tasks }: { per
             }
           </section>
         </div>
-        <div className="p-4 border-t border-slate-100">
+        <div className="p-4 border-t border-slate-100 space-y-2">
           <button onClick={onEdit}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-800 text-white text-[13px] font-semibold hover:bg-slate-700">
             <Pencil size={13}/> Edit Person
+          </button>
+          <button onClick={onManageCredentials}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-slate-200 text-[13px] font-semibold text-slate-700 hover:bg-slate-50">
+            <Users size={13}/> Manage Credentials
           </button>
         </div>
       </div>
@@ -414,6 +489,8 @@ function PersonsTab({ persons, setPersons, positions, tasks, createPerson, updat
   const [modal, setModal] = useState<"create" | "edit" | "delete" | null>(null);
   const [target, setTarget] = useState<PersonItem | null>(null);
   const [drawer, setDrawer] = useState<PersonItem | null>(null);
+  const [credOpen, setCredOpen] = useState(false);
+  const [credPerson, setCredPerson] = useState<PersonItem | null>(null);
 
   const filtered = persons.filter((p) => {
     const ms = p.name.toLowerCase().includes(search.toLowerCase()) || p.empId.toLowerCase().includes(search.toLowerCase());
@@ -566,6 +643,7 @@ function PersonsTab({ persons, setPersons, positions, tasks, createPerson, updat
           tasks={tasks}
           onClose={()=>setDrawer(null)}
           onEdit={()=>{ setTarget(drawer); setDrawer(null); setModal("edit"); }}
+          onManageCredentials={() => { setCredPerson(drawer); setCredOpen(true); }}
         />
       )}
 
@@ -576,6 +654,7 @@ function PersonsTab({ persons, setPersons, positions, tasks, createPerson, updat
         {target && <PersonForm initial={target as PersonFormData} onSubmit={update} onCancel={()=>setModal(null)} positions={positions}/>}
       </Modal>
       <ConfirmDelete open={modal==="delete"} onClose={()=>setModal(null)} onConfirm={remove} name={target?.name}/>
+      <CreateCredentialsModal open={credOpen} onClose={()=>setCredOpen(false)} person={credPerson} positions={positions} />
     </div>
   );
 }
