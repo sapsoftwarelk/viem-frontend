@@ -39,13 +39,13 @@ const SEED_POSITIONS = [
 ];
 
 const SEED_PERSONS = [
-  { id: "p1", empId: "EMP-0001", name: "Anil Perera",        email: "anil@venus.lk",    phone: "+94 77 123 4567", joinDate: "2019-03-15", positionId: "pos1", status: "active" },
-  { id: "p2", empId: "EMP-0002", name: "Kamala Wijesinghe",  email: "kamala@venus.lk",  phone: "+94 77 234 5678", joinDate: "2020-07-01", positionId: "pos3", status: "active" },
-  { id: "p3", empId: "EMP-0003", name: "Ruwantha Bandara",   email: "ruwan@venus.lk",   phone: "+94 76 345 6789", joinDate: "2021-01-10", positionId: "pos4", status: "active" },
-  { id: "p4", empId: "EMP-0004", name: "Nalini Fernando",    email: "nalini@venus.lk",  phone: "+94 71 456 7890", joinDate: "2022-04-20", positionId: "pos4", status: "active" },
-  { id: "p5", empId: "EMP-0005", name: "Suresh Mendis",      email: "suresh@venus.lk",  phone: "+94 70 567 8901", joinDate: "2022-09-05", positionId: "pos6", status: "active" },
-  { id: "p6", empId: "EMP-0006", name: "Dilani Rathnayake",  email: "dilani@venus.lk",  phone: "+94 77 678 9012", joinDate: "2023-02-14", positionId: "pos5", status: "inactive" },
-  { id: "p7", empId: "EMP-0007", name: "Thilak Samaraweera", email: "thilak@venus.lk",  phone: "+94 75 789 0123", joinDate: "2023-06-01", positionId: "pos7", status: "active" },
+  { id: "p1", empId: "EMP-0001", name: "Anil Perera",        email: "anil@venus.lk",    phone: "+94 77 123 4567", joinDate: "2019-03-15", positionId: "pos1", status: "active", employmentType: "Permanent" },
+  { id: "p2", empId: "EMP-0002", name: "Kamala Wijesinghe",  email: "kamala@venus.lk",  phone: "+94 77 234 5678", joinDate: "2020-07-01", positionId: "pos3", status: "active", employmentType: "Permanent" },
+  { id: "p3", empId: "EMP-0003", name: "Ruwantha Bandara",   email: "ruwan@venus.lk",   phone: "+94 76 345 6789", joinDate: "2021-01-10", positionId: "pos4", status: "active", employmentType: "Permanent" },
+  { id: "p4", empId: "EMP-0004", name: "Nalini Fernando",    email: "nalini@venus.lk",  phone: "+94 71 456 7890", joinDate: "2022-04-20", positionId: "pos4", status: "active", employmentType: "Temporary" },
+  { id: "p5", empId: "EMP-0005", name: "Suresh Mendis",      email: "suresh@venus.lk",  phone: "+94 70 567 8901", joinDate: "2022-09-05", positionId: "pos6", status: "active", employmentType: "Permanent" },
+  { id: "p6", empId: "EMP-0006", name: "Dilani Rathnayake",  email: "dilani@venus.lk",  phone: "+94 77 678 9012", joinDate: "2023-02-14", positionId: "pos5", status: "inactive", employmentType: "Contract" },
+  { id: "p7", empId: "EMP-0007", name: "Thilak Samaraweera", email: "thilak@venus.lk",  phone: "+94 75 789 0123", joinDate: "2023-06-01", positionId: "pos7", status: "active", employmentType: "Temporary" },
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -89,6 +89,7 @@ type PersonItem = {
   joinDate: string;
   positionId: string;
   status: string;
+  employmentType: string;
 };
 
 type PersonFormData = {
@@ -99,6 +100,7 @@ type PersonFormData = {
   joinDate: string;
   positionId: string;
   status: "active" | "inactive";
+  employmentType: string;
 };
 
 function uid(): string { return Math.random().toString(36).slice(2,9); }
@@ -237,6 +239,7 @@ function PersonForm({ initial, onSubmit, onCancel, positions }: { initial?: Pers
       joinDate: initial.joinDate,
       positionId: initial.positionId,
       status: initial.status === 'inactive' ? 'inactive' : 'active',
+      employmentType: initial.employmentType || 'Permanent',
     } as PersonFormData) : {
       name: "",
       empId: "",
@@ -245,6 +248,7 @@ function PersonForm({ initial, onSubmit, onCancel, positions }: { initial?: Pers
       joinDate: "",
       positionId: positions[0]?.id || "",
       status: "active",
+      employmentType: "Permanent",
     }
   );
   const validateField = (field: keyof PersonFormData, value: string): string => {
@@ -358,6 +362,15 @@ const set = (
             className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5">Employment Type</label>
+          <select value={form.employmentType} onChange={e=>set("employmentType",e.target.value)}
+            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
+            <option value="Permanent">Permanent</option>
+            <option value="Temporary">Temporary</option>
+            <option value="Contract">Contract</option>
           </select>
         </div>
         <div className="col-span-2">
@@ -576,6 +589,7 @@ function PersonsTab({ persons, setPersons, positions, tasks, createPerson, updat
             <tr className="border-b border-slate-100 bg-slate-50">
               <th className="px-5 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Person</th>
               <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Position</th>
+              <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Employment</th>
               <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest hidden md:table-cell">Contact</th>
               <th className="px-4 py-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status</th>
               <th className="px-4 py-3 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">Actions</th>
@@ -583,7 +597,7 @@ function PersonsTab({ persons, setPersons, positions, tasks, createPerson, updat
           </thead>
           <tbody className="divide-y divide-slate-50">
             {filtered.length === 0
-              ? <tr><td colSpan={5} className="text-center py-12 text-slate-400 text-[13px]">No persons match</td></tr>
+              ? <tr><td colSpan={6} className="text-center py-12 text-slate-400 text-[13px]">No persons match</td></tr>
               : filtered.map(person => {
                   const pos = positions.find(p=>p.id===person.positionId);
                   return (
@@ -602,6 +616,12 @@ function PersonsTab({ persons, setPersons, positions, tasks, createPerson, updat
                       </td>
                       <td className="px-4 py-3.5">
                         {pos ? <PosBadge pos={pos} size="xs"/> : <span className="text-[11px] text-slate-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border
+                          ${person.employmentType==="Permanent"?"bg-blue-50 text-blue-700 border-blue-200":person.employmentType==="Temporary"?"bg-amber-50 text-amber-700 border-amber-200":"bg-purple-50 text-purple-700 border-purple-200"}`}>
+                          {person.employmentType||"Permanent"}
+                        </span>
                       </td>
                       <td className="px-4 py-3.5 hidden md:table-cell">
                         <p className="text-[12px] text-slate-500">{person.email||"—"}</p>
@@ -684,7 +704,7 @@ export default function App() {
 
         if (Array.isArray(pers)) {
           setPersons(
-            pers.map((e) => ({ id: e.id, empId: e.employeeId, name: e.fullName || e.name, email: e.contact || "", phone: e.contact || "", joinDate: e.joinDate ? e.joinDate.split("T")[0] : "", positionId: e.roleId || e.positionId || "", status: e.status?.toLowerCase() === "inactive" ? "inactive" : "active" }))
+            pers.map((e) => ({ id: e.id, empId: e.employeeId, name: e.fullName || e.name, email: e.contact || "", phone: e.contact || "", joinDate: e.joinDate ? e.joinDate.split("T")[0] : "", positionId: e.roleId || e.positionId || "", status: e.status?.toLowerCase() === "inactive" ? "inactive" : "active", employmentType: e.employmentType || "Permanent" }))
           );
         }
       } catch (err) {
@@ -704,9 +724,10 @@ export default function App() {
         joinDate: data.joinDate || undefined,
         roleId: data.positionId || undefined,
         status: data.status || "active",
+        employmentType: data.employmentType || "Permanent",
       };
       const created = await apiFetch("/employees", { method: "POST", body: JSON.stringify(payload) }).catch(() => null);
-      if (created) setPersons((prev) => [{ id: created.id, empId: created.employeeId, name: created.fullName, email: created.contact, phone: created.contact, joinDate: created.joinDate ? created.joinDate.split("T")[0] : "", positionId: created.roleId || "", status: created.status?.toLowerCase() || "active" }, ...prev]);
+      if (created) setPersons((prev) => [{ id: created.id, empId: created.employeeId, name: created.fullName, email: created.contact, phone: created.contact, joinDate: created.joinDate ? created.joinDate.split("T")[0] : "", positionId: created.roleId || "", status: created.status?.toLowerCase() || "active", employmentType: created.employmentType || "Permanent" }, ...prev]);
     } catch (err) {
       console.error("Create person failed:", err);
     }
@@ -720,6 +741,7 @@ export default function App() {
         joinDate: data.joinDate || undefined,
         roleId: data.positionId || undefined,
         status: data.status || "active",
+        employmentType: data.employmentType || "Permanent",
       };
       const updated = await apiFetch(`/employees/${id}`, { method: "PUT", body: JSON.stringify(payload) }).catch(() => null);
       if (updated) setPersons((prev) => prev.map((p) => (p.id === id ? { ...p, ...data } : p)));
