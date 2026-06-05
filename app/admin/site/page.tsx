@@ -5,7 +5,7 @@ import { apiFetch } from "../../../lib/api";
 import {
   Plus, Search, Filter, Edit2, Trash2, X, ChevronRight,
   Building2, MapPin, Phone, Calendar, Clock, ChevronDown,
-  Layers, FolderTree, MoreVertical, CheckCircle, AlertCircle
+  Layers, FolderTree, MoreVertical, CheckCircle, AlertCircle, User
 } from "lucide-react";
 import Badge from "@/components/shared/Badge";
 
@@ -55,6 +55,7 @@ function mapBackendSite(site: any): Site {
   return {
     id: site.id,
     name: site.siteName || site.name || "",
+    manager: site.manager || "",
     region: site.region || "",
     seq: site.seq || 1,
     status: site.status || "Planning",
@@ -70,6 +71,7 @@ function mapBackendSite(site: any): Site {
 function sitePayload(site: Partial<Site>) {
   return {
     siteName: site.name,
+    manager: site.manager || "",
     region: site.region,
     seq: site.seq,
     status: site.status,
@@ -93,6 +95,7 @@ type SubLevel = {
 type Site = {
   id: string;
   name: string;
+  manager: string;
   region: string;
   seq: number;
   status: string;
@@ -108,6 +111,7 @@ const SEED_SITES: Site[] = [
   {
     id: "SITE-COL-0001",
     name: "Colombo City Tower",
+    manager: "Anil Perera",
     region: "COL",
     seq: 1,
     status: "Active",
@@ -121,6 +125,7 @@ const SEED_SITES: Site[] = [
   {
     id: "SITE-NBO-0001",
     name: "Nairobi Business Park",
+    manager: "John Mwangi",
     region: "NBO",
     seq: 1,
     status: "Planning",
@@ -225,6 +230,7 @@ function SubLevelModal({ title, initial, onClose, onSave }: any) {
 function SiteFormModal({ onClose, onSave, initial, isEdit = false }: any) {
   const [form, setForm] = useState(initial || {
     name: "",
+    manager: "",
     region: REGIONS[0],
     client: "",
     contactNumber: "",
@@ -263,6 +269,7 @@ function SiteFormModal({ onClose, onSave, initial, isEdit = false }: any) {
 };
   const isValid =
   form.name.trim() &&
+  form.manager.trim() &&
   form.client.trim() &&
   /^\d{10}$/.test(form.contactNumber);
 
@@ -275,6 +282,7 @@ function SiteFormModal({ onClose, onSave, initial, isEdit = false }: any) {
           <div><label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Status</label><select value={form.status} onChange={(e) => handleChange("status", e.target.value)} className="w-full border rounded-xl px-4 py-2.5 text-sm">{Object.keys(STATUS_STYLES).map(s => <option key={s}>{s}</option>)}</select></div>
         </div>
         <div><label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Client *</label><input value={form.client} onChange={(e) => handleChange("client", e.target.value)} className="w-full border rounded-xl px-4 py-2.5 text-sm" /></div>
+        <div><label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Site Manager *</label><input value={form.manager} onChange={(e) => handleChange("manager", e.target.value)} className="w-full border rounded-xl px-4 py-2.5 text-sm" /></div>
         <div><label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Contact Number</label><input type="tel"
   value={form.contactNumber}
   onChange={(e) =>
@@ -389,6 +397,7 @@ function SiteDetailPanel({ site, onUpdate, onClose }: any) {
       {/* Site Info */}
       <div className="px-6 py-4 border-b border-slate-100 grid grid-cols-2 gap-4 text-sm">
         <div className="flex items-start gap-2"><MapPin size={14} className="text-slate-400 mt-0.5" /><div><p className="font-medium text-slate-700">Address</p><p className="text-slate-500">{site.address}</p></div></div>
+        <div className="flex items-start gap-2"><User size={14} className="text-slate-400 mt-0.5" /><div><p className="font-medium text-slate-700">Site Manager</p><p className="text-slate-500">{site.manager}</p></div></div>
         <div className="flex items-start gap-2"><Phone size={14} className="text-slate-400 mt-0.5" /><div><p className="font-medium text-slate-700">Contact</p><p className="text-slate-500">{site.contactNumber}</p></div></div>
         <div className="flex items-start gap-2"><Calendar size={14} className="text-slate-400 mt-0.5" /><div><p className="font-medium text-slate-700">Start Date</p><p className="text-slate-500">{site.startDate}</p></div></div>
         {site.remarks && <div className="col-span-2 flex items-start gap-2"><Clock size={14} className="text-slate-400 mt-0.5" /><div><p className="font-medium text-slate-700">Remarks</p><p className="text-slate-500">{site.remarks}</p></div></div>}

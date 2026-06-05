@@ -325,6 +325,10 @@ function TaskStatusBadge({ status }: { status: TaskStatus }) {
   return <span className={`inline-flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded-full font-semibold border ${s.bg} ${s.text} ${s.border}`}><span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />{status.replace("_", " ")}</span>;
 }
 
+function getEmployeeName(employees: Employee[], id: string) {
+  return employees.find((e) => e.id === id)?.name || "Unassigned";
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // TRANSFER NOTE MODAL (Professional)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -634,11 +638,26 @@ function TransferNoteDrawer({ note, onClose, onUpdateStatus }: any) {
 // SITE DASHBOARD (with Transfer Notes tab)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function SiteDashboard({ site, onBack, tasks, setTasks, employees, vehicles, inventoryItems, allSites }: any) {
+function SiteDashboard({ site, onBack, tasks, setTasks, onUpdateSite, employees, vehicles, inventoryItems, allSites }: any) {
   const [activeTab, setActiveTab] = useState<"tasks" | "transfers" | "vehicles" | "logs">("transfers");
   const [selectedSubLevel, setSelectedSubLevel] = useState<string>("ALL");
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [selectedTransfer, setSelectedTransfer] = useState<any>(null);
+  const [isEditingManager, setIsEditingManager] = useState(false);
+  const [managerName, setManagerName] = useState(site.manager || "");
+
+  useEffect(() => {
+    setManagerName(site.manager || "");
+    setIsEditingManager(false);
+  }, [site]);
+
+  const managerOptions = employees.filter((e: any) => e.role === "Site Manager");
+
+  const handleSaveManager = () => {
+    const updatedSite = { ...site, manager: managerName.trim() };
+    onUpdateSite(updatedSite);
+    setIsEditingManager(false);
+  };
 
   const subLevelOptions = ["ALL", ...site.subLevels];
 
@@ -682,6 +701,29 @@ function SiteDashboard({ site, onBack, tasks, setTasks, employees, vehicles, inv
             <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white"><Building2 size={18} /></div>
             <div><p className="text-[11px] font-mono text-slate-400">{site.code}</p><h1 className="text-[20px] font-extrabold text-slate-800">{site.name}</h1></div>
           </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] items-center">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3">
+              <div className="flex items-center gap-2 text-sm text-slate-500"><User size={14} className="text-slate-400" /><span><span className="font-medium text-slate-700">Site Manager:</span> {site.manager || "Unassigned"}</span></div>
+              <div className="text-sm text-slate-400">Client: {site.client}</div>
+            </div>
+            <button onClick={() => setIsEditingManager((prev) => !prev)} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-[12px] font-semibold text-slate-700 hover:bg-slate-50">{isEditingManager ? "Cancel" : "Change Manager"}</button>
+          </div>
+          {isEditingManager && (
+            <div className="mt-3 bg-slate-50 border border-slate-200 rounded-2xl p-4 grid gap-3 sm:grid-cols-3">
+              <div>
+                <label className="block text-[11px] font-semibold uppercase text-slate-500 mb-1">Choose from team</label>
+                <select value={managerName} onChange={(e) => setManagerName(e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white">
+                  <option value="">Select existing manager</option>
+                  {managerOptions.map((opt: any) => <option key={opt.id} value={opt.name}>{opt.name}</option>)}
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-semibold uppercase text-slate-500 mb-1">Or type new manager</label>
+                <input value={managerName} onChange={(e) => setManagerName(e.target.value)} placeholder="Enter site manager name" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
+              </div>
+              <button onClick={handleSaveManager} className="sm:col-span-3 justify-self-end bg-emerald-600 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:bg-emerald-700">Save Manager</button>
+            </div>
+          )}
           <div className="mt-3 flex items-center gap-2"><FolderTree size={14} className="text-slate-400"/><span className="text-[11px] font-medium">Sub-level:</span>
             <select value={selectedSubLevel} onChange={(e) => setSelectedSubLevel(e.target.value)} className="border rounded-lg px-3 py-1.5 text-[12px]">{subLevelOptions.map(opt => <option key={opt} value={opt}>{opt === "ALL" ? "📁 Entire Site" : opt}</option>)}</select>
           </div>
@@ -710,7 +752,28 @@ function SiteDashboard({ site, onBack, tasks, setTasks, employees, vehicles, inv
           </div>
         )}
         {activeTab === "tasks" && (
-          <div><h2 className="font-bold mb-4">Site Tasks</h2>{tasks.length === 0 ? <div className="text-center py-12 text-slate-400">No tasks.</div> : tasks.map((t:any)=> <div key={t.id} className="bg-white border rounded-xl p-3 mb-2">{t.jobName}</div>)}</div>
+          <div>
+            <h2 className="font-bold mb-4">Site Tasks</h2>
+            {tasks.length === 0 ? (
+              <div className="text-center py-12 text-slate-400">No tasks.</div>
+            ) : (
+              <div className="space-y-3">
+                {tasks.map((t:any) => (
+                  <div key={t.id} className="bg-white border rounded-xl p-4 mb-2">
+                    <div className="flex justify-between items-start gap-4">
+                      <div>
+                        <p className="font-semibold text-slate-800">{t.jobName}</p>
+                        <p className="text-[12px] text-slate-500 mt-1">Manager: {getEmployeeName(employees, t.assignedSiteManagerId)}</p>
+                        <p className="text-[12px] text-slate-500 mt-1">Sub-level: {t.subLevel || "Entire Site"}</p>
+                      </div>
+                      <TaskStatusBadge status={t.status} />
+                    </div>
+                    {t.description && <p className="text-[12px] text-slate-500 mt-3">{t.description}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
         {activeTab === "vehicles" && (
           <div><h2 className="font-bold mb-4">Vehicles</h2>{filteredVehicles.length === 0 ? <div className="text-center py-12 text-slate-400">No vehicles.</div> : filteredVehicles.map((v:any)=><div key={v.id} className="bg-white border rounded-xl p-3 mb-2">{v.vehiclePlate} - {v.driver}</div>)}</div>
@@ -732,7 +795,7 @@ function SiteDashboard({ site, onBack, tasks, setTasks, employees, vehicles, inv
 
 export default function SiteTaskManagerPage() {
   const [selectedSite, setSelectedSite] = useState<Site | null>(null);
-  const [sites] = useState(SITES);
+  const [sites, setSites] = useState(SITES);
   const [employees] = useState(EMPLOYEES);
   const [vehicles] = useState(VEHICLES);
   const [inventoryItems] = useState(INVENTORY_ITEMS);
@@ -746,7 +809,20 @@ export default function SiteTaskManagerPage() {
   };
 
   if (selectedSite) {
-    return <SiteDashboard site={selectedSite} onBack={() => setSelectedSite(null)} tasks={tasksBySite[selectedSite.id] || []} setTasks={(newTasks: SiteTask[]) => updateSiteTasks(selectedSite.id, newTasks)} employees={employees} vehicles={vehicles} inventoryItems={inventoryItems} allSites={sites} />;
+    return <SiteDashboard
+      site={selectedSite}
+      onBack={() => setSelectedSite(null)}
+      tasks={tasksBySite[selectedSite.id] || []}
+      setTasks={(newTasks: SiteTask[]) => updateSiteTasks(selectedSite.id, newTasks)}
+      onUpdateSite={(updatedSite: Site) => {
+        setSelectedSite(updatedSite);
+        setSites((prev) => prev.map((s) => s.id === updatedSite.id ? updatedSite : s));
+      }}
+      employees={employees}
+      vehicles={vehicles}
+      inventoryItems={inventoryItems}
+      allSites={sites}
+    />;
   }
 
   return (
@@ -757,7 +833,7 @@ export default function SiteTaskManagerPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredSites.map(site => (
             <div key={site.id} onClick={() => setSelectedSite(site)} className="bg-white rounded-2xl border p-5 cursor-pointer hover:shadow-md transition">
-              <div className="flex items-center gap-2"><div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center"><Building2 size={18}/></div><div><p className="text-[10px] font-mono text-slate-400">{site.code}</p><h3 className="font-bold">{site.name}</h3></div></div>
+              <div className="flex items-center gap-2"><div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center"><Building2 size={18}/></div><div><p className="text-[10px] font-mono text-slate-400">{site.code}</p><h3 className="font-bold">{site.name}</h3><p className="text-[11px] text-slate-500 mt-1">Manager: {site.manager}</p></div></div>
               <div className="mt-3 text-[12px] text-slate-500 flex items-center gap-1"><MapPin size={11}/> {site.location}</div>
               <div className="mt-4 flex justify-between text-center"><div><p className="text-[18px] font-bold">{tasksBySite[site.id]?.length || 0}</p><p className="text-[10px] text-slate-400">Tasks</p></div><div><p className="text-[18px] font-bold text-amber-600">{tasksBySite[site.id]?.flatMap(t=>t.transferNotes).length || 0}</p><p className="text-[10px] text-slate-400">Transfers</p></div></div>
             </div>
