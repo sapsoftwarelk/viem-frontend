@@ -17,6 +17,12 @@ type ItemType = "Tool" | "Reusable" | "Consumable";
 
 type AnyRecord = Record<string, any>;
 
+interface BatchSplit {
+  id: string;
+  quantity: number | string;
+  expiryDate: string;
+}
+
 interface SubCategory {
   id?: string;
   code: string;
@@ -44,9 +50,11 @@ interface ItemFormData {
   purchaseDate: string;
   warrantyExp: string;
   batchDate: string;
+  expiryDate: string;
   pieceCount: string | number;
   individualTracking?: string;
   bundleId?: string;
+  batchSplits?: BatchSplit[];
   registeredDate?: string;
   meta: AnyRecord;
   [key: string]: any;
@@ -185,6 +193,7 @@ function mapBackendItem(itemRecord: AnyRecord): ItemFormData {
   const type = normalizeType(itemRecord?.type || item?.type);
   const categoryCode = parseCategoryCode(item);
   const categoryLabel = getCategoryLabel(type, categoryCode);
+  const expiryDate = item.expiryDate ? String(item.expiryDate).split("T")[0] : "";
   return {
     id: String(item.id || item.itemId || uid()),
     itemId: String(item.id || item.itemId || uid()),
@@ -200,6 +209,8 @@ function mapBackendItem(itemRecord: AnyRecord): ItemFormData {
     quantity: item.quantity ?? item.pieceNum ?? item.pieceCount ?? 1,
     unit: String(item.unit || (type === "Reusable" ? "pcs" : "")),
     batchDate: item.batchDate ? String(item.batchDate).split("T")[0] : "",
+    expiryDate,
+    batchSplits: type === "Consumable" && expiryDate ? [{ id: uid(), quantity: item.quantity ?? 1, expiryDate }] : [],
     pieceCount: item.pieceCount ?? item.pieceNum ?? "",
     registeredDate: item.receivedDate ? String(item.receivedDate).split("T")[0] : item.purchaseDate ? String(item.purchaseDate).split("T")[0] : todayStr(),
     meta: {
@@ -589,6 +600,8 @@ function ItemForm({ initial, onSubmit, onCancel, subCategories = [] }: {
     purchaseDate: "",
     warrantyExp: "",
     batchDate: todayStr(),
+    expiryDate: "",
+    batchSplits: [],
     pieceCount: "",
     meta: {},
   };
@@ -674,7 +687,27 @@ function ItemForm({ initial, onSubmit, onCancel, subCategories = [] }: {
       if (!form.batchDate) {
         nextErrors.batchDate = "Batch date is required";
       }
-      if (!form.unit?.trim()) {
+      const hasBatchSplits = Boolean(form.batchSplits?.length);
+      if (!hasBatchSplits) {
+        nextErrors.batchSplits = "Add at least one expiry date";
+      }
+      const splitQtyTotal = form.batchSplits?.reduce((sum, split) => sum + (Number(split.quantity) || 0), 0) || 0;
+      form.batchSplits?.forEach((split, index) => {
+        if (!split.quantity || Number(split.quantity) <= 0) {
+          nextErrors[`batchSplitQty-${split.id}`] = `Batch ${index + 1} quantity is required`;
+        }
+        if (!split.expiryDate) {
+          nextErrors[`batchSplitExpiry-${split.id}`] = `Batch ${index + 1} expiry date is required`;
+        } else if (form.batchDate && split.expiryDate < form.batchDate) {
+          nextErrors[`batchSplitExpiry-${split.id}`] = `Batch ${index + 1} expiry must be after batch date`;
+        }
+      });
+      if (hasBatchSplits && splitQtyTotal !== Number(form.quantity || 0)) {
+        nextErrors.batchSplits = "Batch quantities must equal total quantity";
+      }
+      // For Consumable, unit can come from form.unit or category
+      const categoryUnit = catObj?.unit;
+      if (!form.unit?.trim() && !categoryUnit?.trim()) {
         nextErrors.unit = "Unit is required";
       }
       if (!form.quantity || Number(form.quantity) <= 0) {
@@ -704,6 +737,7 @@ function ItemForm({ initial, onSubmit, onCancel, subCategories = [] }: {
     set("type", t);
     set("categoryCode", cats[0]?.code || "");
     set("meta", {});
+    set("batchSplits", t === "Consumable" ? [{ id: uid(), quantity: form.quantity || 1, expiryDate: "" }] : []);
   };
 
   const catList = getCategoryList(form.type, subCategories);
@@ -711,10 +745,30 @@ function ItemForm({ initial, onSubmit, onCancel, subCategories = [] }: {
   const isReusable   = form.type === "Reusable";
   const isConsumable = form.type === "Consumable";
   const isTool       = form.type === "Tool";
+  const batchSplits = form.batchSplits || [];
+  const splitTotal = batchSplits.reduce((sum, split) => sum + (Number(split.quantity) || 0), 0);
+  const totalQuantity = Number(form.quantity) || 0;
 
   const valid = Boolean(form.name.trim() && form.categoryCode);
 
   const inputCls = "w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white text-slate-700";
+
+  const addBatchSplit = () => {
+    set("batchSplits", [
+      ...batchSplits,
+      { id: uid(), quantity: "", expiryDate: "" },
+    ]);
+  };
+
+  const updateBatchSplit = (id: string, key: keyof BatchSplit, value: string) => {
+    set("batchSplits", batchSplits.map((split) => (
+      split.id === id ? { ...split, [key]: value } : split
+    )));
+  };
+
+  const removeBatchSplit = (id: string) => {
+    set("batchSplits", batchSplits.filter((split) => split.id !== id));
+  };
 
   const handleSubmit = () => {
     if (!validateForm()) return;
@@ -883,6 +937,65 @@ function ItemForm({ initial, onSubmit, onCancel, subCategories = [] }: {
                 <p className="mt-1 text-xs text-red-500">{errors.unit}</p>
               ) : null}
             </Field>
+            <div className="col-span-2 border border-slate-200 rounded-xl p-3 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-bold uppercase text-slate-400 tracking-wider">Expiry Breakdown</p>
+                  {batchSplits.length > 0 ? (
+                    <p className={`text-[11px] ${splitTotal === totalQuantity ? "text-emerald-600" : "text-amber-600"}`}>
+                      {splitTotal} / {totalQuantity} {form.unit || catObj?.unit || ""}
+                    </p>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={addBatchSplit}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-[12px] font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                  <Plus size={12} /> Add Date
+                </button>
+              </div>
+
+              {batchSplits.map((split, index) => (
+                <div key={split.id} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-start">
+                  <div>
+                    <input
+                      value={split.quantity}
+                      onChange={(e) => updateBatchSplit(split.id, "quantity", e.target.value)}
+                      type="number"
+                      min="1"
+                      placeholder={`Qty ${index + 1}`}
+                      className={`${inputCls} ${errors[`batchSplitQty-${split.id}`] ? "border-red-500 focus:ring-red-400" : ""}`}
+                    />
+                    {errors[`batchSplitQty-${split.id}`] ? (
+                      <p className="mt-1 text-xs text-red-500">{errors[`batchSplitQty-${split.id}`]}</p>
+                    ) : null}
+                  </div>
+                  <div>
+                    <input
+                      value={split.expiryDate}
+                      onChange={(e) => updateBatchSplit(split.id, "expiryDate", e.target.value)}
+                      type="date"
+                      className={`${inputCls} ${errors[`batchSplitExpiry-${split.id}`] ? "border-red-500 focus:ring-red-400" : ""}`}
+                    />
+                    {errors[`batchSplitExpiry-${split.id}`] ? (
+                      <p className="mt-1 text-xs text-red-500">{errors[`batchSplitExpiry-${split.id}`]}</p>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeBatchSplit(split.id)}
+                    className="mt-1 rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-500"
+                    title="Remove expiry date"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+              {errors.batchSplits ? (
+                <p className="text-xs text-red-500">{errors.batchSplits}</p>
+              ) : null}
+            </div>
           </>
         )}
 
@@ -1019,6 +1132,7 @@ function ItemDrawer({ item, onClose, onEdit, onQR }: { item: ItemFormData; onClo
                   item.quantity     && ["Quantity", `${item.quantity} ${item.unit || ""}`],
                   item.pieceCount   && ["Piece Count", String(item.pieceCount)],
                   item.batchDate    && ["Batch Date", formatDate(item.batchDate)],
+                  item.expiryDate   && ["Expiry Date", formatDate(item.expiryDate)],
                 ] as Array<[string, string] | false>
               ).filter((entry): entry is [string, string] => Boolean(entry)).map(([label, value]) => (
                 <div key={label} className="flex justify-between items-start gap-3">
@@ -1112,13 +1226,13 @@ function ConfirmDelete({ open, onClose, onConfirm, name }: { open: boolean; onCl
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SEED_ITEMS = [
-  { id:"i1", itemId:"TOOL-CUT-0001", type:"Tool",       categoryCode:"CUT",  categoryLabel:"Cutting Machines",        name:"Angle Grinder 230mm",         status:"Active",       location:"Site A – Workshop",  supplier:"MachinCo",    purchaseDate:"2024-03-10", warrantyExp:"2026-03-10", quantity:2,  unit:"",      batchDate:"",           pieceCount:"",  registeredDate:"2024-03-10", meta:{ maxHours:"500", serialNo:"CUT-2024-001", bladeType:"Diamond" },       description:"Heavy-duty angle grinder" },
-  { id:"i2", itemId:"TOOL-GEN-0001", type:"Tool",       categoryCode:"GEN",  categoryLabel:"Generators",              name:"Diesel Generator 15KVA",       status:"In Use",       location:"Site B",             supplier:"PowerGen",    purchaseDate:"2023-11-05", warrantyExp:"2025-11-05", quantity:1,  unit:"",      batchDate:"",           pieceCount:"",  registeredDate:"2023-11-05", meta:{ runningHours:"320", outputKVA:"15" },                                description:"Backup power for Site B" },
-  { id:"i3", itemId:"TOOL-WLD-0001", type:"Tool",       categoryCode:"WLD",  categoryLabel:"Welding Machines",        name:"MIG Welder 250A",              status:"Under Maintenance", location:"Workshop",       supplier:"WeldTech",    purchaseDate:"2022-06-20", warrantyExp:"2024-06-20", quantity:1,  unit:"",      batchDate:"",           pieceCount:"",  registeredDate:"2022-06-20", meta:{ arcHours:"1200", amperageRange:"50-250A" },                          description:"Used for structural welding" },
-  { id:"i4", itemId:"REUS-SCF-0001", type:"Reusable",   categoryCode:"SCF",  categoryLabel:"Scaffolding Frames",      name:"Standard Scaffolding Bundle A", status:"Active",       location:"Yard – Section 3",   supplier:"ScaffoldPro", purchaseDate:"2023-01-15", warrantyExp:"",           quantity:1,  unit:"frames",batchDate:"",           pieceCount:"5",  registeredDate:"2023-01-15", meta:{},                                                                    description:"5-frame bundle for standard floors" },
-  { id:"i5", itemId:"REUS-PROP-0001",type:"Reusable",   categoryCode:"PROP", categoryLabel:"Acrow Props / Steel Props",name:"Acrow Props Set 1",           status:"In Use",       location:"Site C – Level 2",   supplier:"PropsPlus",   purchaseDate:"2023-05-10", warrantyExp:"",           quantity:1,  unit:"props", batchDate:"",           pieceCount:"10", registeredDate:"2023-05-10", meta:{},                                                                    description:"10-prop bundle" },
-  { id:"i6", itemId:"CONS-CEM-2026-04-16-01", type:"Consumable", categoryCode:"CEM", categoryLabel:"Cement (bagged)", name:"OPC Cement Batch Apr-16",     status:"Active",       location:"Warehouse A",        supplier:"CementCo",    purchaseDate:"",           warrantyExp:"",           quantity:500,unit:"Bags",  batchDate:"2026-04-16", pieceCount:"",  registeredDate:"2026-04-16", meta:{},                                                                    description:"Ordinary Portland Cement" },
-  { id:"i7", itemId:"CONS-RBR-2026-04-16-01", type:"Consumable", categoryCode:"RBR", categoryLabel:"Rebar / Steel Reinforcement", name:"T12 Rebar Batch Apr-16", status:"Active", location:"Yard – Steel Store", supplier:"SteelMart",   purchaseDate:"",           warrantyExp:"",           quantity:200,unit:"Length (m) or kg", batchDate:"2026-04-16", pieceCount:"", registeredDate:"2026-04-16", meta:{},                                                                    description:"T12 deformed steel bar" },
+  { id:"i1", itemId:"TOOL-CUT-0001", type:"Tool",       categoryCode:"CUT",  categoryLabel:"Cutting Machines",        name:"Angle Grinder 230mm",         status:"Active",       location:"Site A – Workshop",  supplier:"MachinCo",    purchaseDate:"2024-03-10", warrantyExp:"2026-03-10", quantity:2,  unit:"",      batchDate:"",           expiryDate:"",           pieceCount:"",  registeredDate:"2024-03-10", meta:{ maxHours:"500", serialNo:"CUT-2024-001", bladeType:"Diamond" },       description:"Heavy-duty angle grinder" },
+  { id:"i2", itemId:"TOOL-GEN-0001", type:"Tool",       categoryCode:"GEN",  categoryLabel:"Generators",              name:"Diesel Generator 15KVA",       status:"In Use",       location:"Site B",             supplier:"PowerGen",    purchaseDate:"2023-11-05", warrantyExp:"2025-11-05", quantity:1,  unit:"",      batchDate:"",           expiryDate:"",           pieceCount:"",  registeredDate:"2023-11-05", meta:{ runningHours:"320", outputKVA:"15" },                                description:"Backup power for Site B" },
+  { id:"i3", itemId:"TOOL-WLD-0001", type:"Tool",       categoryCode:"WLD",  categoryLabel:"Welding Machines",        name:"MIG Welder 250A",              status:"Under Maintenance", location:"Workshop",       supplier:"WeldTech",    purchaseDate:"2022-06-20", warrantyExp:"2024-06-20", quantity:1,  unit:"",      batchDate:"",           expiryDate:"",           pieceCount:"",  registeredDate:"2022-06-20", meta:{ arcHours:"1200", amperageRange:"50-250A" },                          description:"Used for structural welding" },
+  { id:"i4", itemId:"REUS-SCF-0001", type:"Reusable",   categoryCode:"SCF",  categoryLabel:"Scaffolding Frames",      name:"Standard Scaffolding Bundle A", status:"Active",       location:"Yard – Section 3",   supplier:"ScaffoldPro", purchaseDate:"2023-01-15", warrantyExp:"",           quantity:1,  unit:"frames",batchDate:"",           expiryDate:"",           pieceCount:"5",  registeredDate:"2023-01-15", meta:{},                                                                    description:"5-frame bundle for standard floors" },
+  { id:"i5", itemId:"REUS-PROP-0001",type:"Reusable",   categoryCode:"PROP", categoryLabel:"Acrow Props / Steel Props",name:"Acrow Props Set 1",           status:"In Use",       location:"Site C – Level 2",   supplier:"PropsPlus",   purchaseDate:"2023-05-10", warrantyExp:"",           quantity:1,  unit:"props", batchDate:"",           expiryDate:"",           pieceCount:"10", registeredDate:"2023-05-10", meta:{},                                                                    description:"10-prop bundle" },
+  { id:"i6", itemId:"CONS-CEM-2026-04-16-01", type:"Consumable", categoryCode:"CEM", categoryLabel:"Cement (bagged)", name:"OPC Cement Batch Apr-16",     status:"Active",       location:"Warehouse A",        supplier:"CementCo",    purchaseDate:"",           warrantyExp:"",           quantity:500,unit:"Bags",  batchDate:"2026-04-16", expiryDate:"2026-07-16", pieceCount:"",  registeredDate:"2026-04-16", meta:{},                                                                    description:"Ordinary Portland Cement" },
+  { id:"i7", itemId:"CONS-RBR-2026-04-16-01", type:"Consumable", categoryCode:"RBR", categoryLabel:"Rebar / Steel Reinforcement", name:"T12 Rebar Batch Apr-16", status:"Active", location:"Yard – Steel Store", supplier:"SteelMart",   purchaseDate:"",           warrantyExp:"",           quantity:200,unit:"Length (m) or kg", batchDate:"2026-04-16", expiryDate:"2027-04-16", pieceCount:"", registeredDate:"2026-04-16", meta:{},                                                                    description:"T12 deformed steel bar" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1180,14 +1294,27 @@ export default function ItemRegistration() {
     try {
       setLoading(true);
       setApiError("");
-      const payload = createItemPayload(data, subCategories);
-      const result = await apiFetch("/items", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-      const created = result;
+      const createForms =
+        data.type === "Consumable" && data.batchSplits?.length
+          ? data.batchSplits.map((split) => ({
+              ...data,
+              quantity: split.quantity,
+              expiryDate: split.expiryDate,
+              batchSplits: [],
+            }))
+          : [data];
+
+      const results = [];
+      for (const formData of createForms) {
+        const payload = createItemPayload(formData, subCategories);
+        results.push(await apiFetch("/items", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        }));
+      }
       const newItems: ItemFormData[] = [];
-      if (created.item) {
+      for (const created of results) {
+        if (!created.item) continue;
         if (Array.isArray(created.item)) {
           newItems.push(...created.item.map((item: AnyRecord) => mapBackendItem({ type: created.type, item })));
         } else {

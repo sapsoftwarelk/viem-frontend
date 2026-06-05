@@ -51,6 +51,7 @@ interface TransferItem {
   availableStock: number;
   unitPrice?: number;
   notes?: string;
+  expireDate?: string;
 }
 
 interface TransferNote {
@@ -113,6 +114,7 @@ interface InventoryItem {
   unit: string;
   quantity: number;      // warehouse stock
   siteStock?: Record<string, number>; // stock per site (siteId -> quantity)
+  expiryDate?: string;   // ISO date string for consumables
 }
 
 interface SiteTask {
@@ -221,8 +223,8 @@ const VEHICLES: Vehicle[] = [
 
 // Inventory with site-specific stock
 const INVENTORY_ITEMS: InventoryItem[] = [
-  { id: "item1", name: "OPC Cement 50kg", type: "Consumable", unit: "Bags", quantity: 500, siteStock: { site1: 200, site2: 100, site3: 50 } },
-  { id: "item2", name: "T12 Rebar", type: "Consumable", unit: "kg", quantity: 5000, siteStock: { site1: 1200, site2: 800, site3: 400 } },
+  { id: "item1", name: "OPC Cement 50kg", type: "Consumable", unit: "Bags", quantity: 500, siteStock: { site1: 200, site2: 100, site3: 50 }, expiryDate: "2026-06-10" },
+  { id: "item2", name: "T12 Rebar", type: "Consumable", unit: "kg", quantity: 5000, siteStock: { site1: 1200, site2: 800, site3: 400 }, expiryDate: "2026-08-15" },
   { id: "item3", name: "Scaffolding Frame", type: "Reusable", unit: "frames", quantity: 150, siteStock: { site1: 45, site2: 30, site3: 20 } },
   { id: "item4", name: "Angle Grinder", type: "Tool", unit: "pcs", quantity: 10, siteStock: { site1: 4, site2: 2, site3: 1 } },
 ];
@@ -330,6 +332,88 @@ function getEmployeeName(employees: Employee[], id: string) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SEARCHABLE ITEM SELECT COMPONENT
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SearchableItemSelect({ items, selectedId, onSelect, getStock, label }: any) {
+  const [search, setSearch] = useState("");
+  const [open, setOpen] = useState(false);
+
+  const filtered = items
+    .filter((item: any) => {
+      const stock = getStock(item.id);
+      return stock > 0 && item.name.toLowerCase().includes(search.toLowerCase());
+    })
+    .sort((a: any, b: any) => {
+      // Sort by expiry date (soon-to-expire first)
+      const dateA = a.expiryDate ? new Date(a.expiryDate).getTime() : Infinity;
+      const dateB = b.expiryDate ? new Date(b.expiryDate).getTime() : Infinity;
+      return dateA - dateB;
+    });
+
+  const selected = items.find((i: any) => i.id === selectedId);
+
+  return (
+    <div className="relative w-full">
+      <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5">{label}</label>
+      <div
+        onClick={() => setOpen(!open)}
+        className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-white cursor-pointer flex items-center justify-between hover:bg-slate-50"
+      >
+        <span className="text-[13px]">
+          {selected ? `${selected.name} (${getStock(selected.id)} ${selected.unit})` : "Select Item"}
+        </span>
+        <ChevronDown size={16} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+      </div>
+
+      {open && (
+        <div className="absolute top-full left-0 right-0 mt-2 border border-slate-200 rounded-xl bg-white shadow-lg z-40">
+          <input
+            autoFocus
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search items..."
+            className="w-full border-b border-slate-100 px-4 py-2.5 text-[13px] focus:outline-none"
+          />
+          <div className="max-h-64 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="p-4 text-center text-slate-400 text-[12px]">No items available</div>
+            ) : (
+              filtered.map((item: any) => {
+                const stock = getStock(item.id);
+                const isExpiring = item.expiryDate && new Date(item.expiryDate).getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000; // < 7 days
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => {
+                      onSelect(item.id);
+                      setOpen(false);
+                      setSearch("");
+                    }}
+                    className={`p-3 border-b border-slate-50 cursor-pointer hover:bg-blue-50 flex justify-between items-start ${isExpiring ? "bg-yellow-50" : ""}`}
+                  >
+                    <div className="flex-1">
+                      <div className="font-medium text-[13px] text-slate-700">{item.name}</div>
+                      <div className="text-[11px] text-slate-400">Stock: {stock} {item.unit}</div>
+                      {item.expiryDate && (
+                        <div className={`text-[10px] mt-1 ${isExpiring ? "text-rose-600 font-semibold" : "text-slate-500"}`}>
+                          Expires: {new Date(item.expiryDate).toLocaleDateString("en-GB")}
+                        </div>
+                      )}
+                    </div>
+                    {isExpiring && <AlertTriangle size={14} className="text-rose-500 flex-shrink-0 mt-0.5" />}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // TRANSFER NOTE MODAL (Professional)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -422,6 +506,7 @@ function TransferNoteModal({ open, onClose, onSubmit, taskId, currentSite, subLe
           unit: item.unit,
           requestedQuantity: selectedItemRow.quantity,
           availableStock: stock,
+          expireDate: item.expiryDate ? item.expiryDate.split('T')[0] : undefined,
           notes: ""
         }]
       });
@@ -526,20 +611,22 @@ function TransferNoteModal({ open, onClose, onSubmit, taskId, currentSite, subLe
           <div>
             <div className="flex justify-between items-center mb-3">
               <h3 className="font-bold text-[14px]">Items to Transfer</h3>
-              <div className="flex gap-2 items-center">
-                <select value={selectedItemRow.itemId} onChange={(e) => {
-                  const id = e.target.value;
-                  setSelectedItemRow({ ...selectedItemRow, itemId: id });
-                  setAvailableStock(getStockForItem(id));
-                }} className="border rounded-xl px-3 py-1.5 text-[12px] w-48">
-                  <option value="">Select Item</option>
-                  {inventoryItems.map((item: any) => {
-                    const stock = getStockForItem(item.id);
-                    return <option key={item.id} value={item.id} disabled={stock === 0}>{item.name} ({stock} {item.unit})</option>;
-                  })}
-                </select>
-                <input type="number" min="1" value={selectedItemRow.quantity} onChange={(e) => setSelectedItemRow({ ...selectedItemRow, quantity: Number(e.target.value) })} placeholder="Qty" className="border rounded-xl px-3 py-1.5 text-[12px] w-24" />
-                <button onClick={handleSelectItem} className="bg-emerald-600 text-white px-3 py-1.5 rounded-xl text-[12px] flex items-center gap-1"><Plus size={12}/> Add</button>
+              <div className="flex gap-2 items-end flex-1 ml-4">
+                <div className="flex-1">
+                  <SearchableItemSelect
+                    items={inventoryItems}
+                    selectedId={selectedItemRow.itemId}
+                    onSelect={(id: string) => {
+                      const item = inventoryItems.find((i: any) => i.id === id);
+                      setSelectedItemRow({ ...selectedItemRow, itemId: id });
+                      setAvailableStock(getStockForItem(id));
+                    }}
+                    getStock={getStockForItem}
+                    label="Select Item"
+                  />
+                </div>
+                <input type="number" min="1" value={selectedItemRow.quantity} onChange={(e) => setSelectedItemRow({ ...selectedItemRow, quantity: Number(e.target.value) })} placeholder="Qty" className="border rounded-xl px-3 py-2.5 text-[12px] w-24" />
+                <button onClick={handleSelectItem} className="bg-emerald-600 text-white px-3 py-2.5 rounded-xl text-[12px] flex items-center gap-1 h-10"><Plus size={12}/> Add</button>
               </div>
             </div>
             {form.items.length === 0 ? (
@@ -548,18 +635,25 @@ function TransferNoteModal({ open, onClose, onSubmit, taskId, currentSite, subLe
               <div className="border rounded-xl overflow-hidden">
                 <table className="w-full text-[12px]">
                   <thead className="bg-slate-50">
-                    <tr><th className="p-3 text-left">Item</th><th>Unit</th><th>Requested Qty</th><th>Available Stock</th><th className="w-10"></th></tr>
+                    <tr><th className="p-3 text-left">Item</th><th>Unit</th><th>Requested Qty</th><th>Available Stock</th><th>Expires</th><th className="w-10"></th></tr>
                   </thead>
                   <tbody>
-                    {form.items.map((item) => (
-                      <tr key={item.itemId} className="border-t">
-                        <td className="p-3">{item.itemName}</td>
-                        <td className="p-3">{item.unit}</td>
-                        <td className="p-3"><input type="number" value={item.requestedQuantity} onChange={(e) => updateItemQuantity(item.itemId, Number(e.target.value))} className="w-20 border rounded px-2 py-1" /></td>
-                        <td className="p-3">{item.availableStock} {item.unit}</td>
-                        <td className="p-3"><button onClick={() => removeItem(item.itemId)} className="text-rose-500"><Trash2 size={14}/></button></td>
-                      </tr>
-                    ))}
+                    {form.items.map((item) => {
+                      const isExpiring = item.expireDate && new Date(item.expireDate).getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000;
+                      return (
+                        <tr key={item.itemId} className={`border-t ${isExpiring ? "bg-yellow-50" : ""}`}>
+                          <td className="p-3">{item.itemName}</td>
+                          <td className="p-3">{item.unit}</td>
+                          <td className="p-3"><input type="number" value={item.requestedQuantity} onChange={(e) => updateItemQuantity(item.itemId, Number(e.target.value))} className="w-20 border rounded px-2 py-1" /></td>
+                          <td className="p-3">{item.availableStock} {item.unit}</td>
+                          <td className={`p-3 ${isExpiring ? "font-semibold text-rose-600" : ""}`}>
+                            {item.expireDate ? new Date(item.expireDate).toLocaleDateString("en-GB") : "—"}
+                            {isExpiring && " ⚠️"}
+                          </td>
+                          <td className="p-3"><button onClick={() => removeItem(item.itemId)} className="text-rose-500"><Trash2 size={14}/></button></td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
