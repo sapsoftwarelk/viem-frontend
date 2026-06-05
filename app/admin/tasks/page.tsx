@@ -12,6 +12,7 @@ const INITIAL_TASKS = [
     priority: "High",
     description:
       "Send 50 cement bags from the warehouse to Construction Site A before 10 AM.",
+    status: "active",
   },
   {
     id: 2,
@@ -19,6 +20,7 @@ const INITIAL_TASKS = [
     priority: "Medium",
     description:
       "Check and unload steel rods delivered by the supplier and update stock records.",
+    status: "active",
   },
   {
     id: 3,
@@ -26,6 +28,7 @@ const INITIAL_TASKS = [
     priority: "High",
     description:
       "Move drilling machines and cutting tools to the main construction area.",
+    status: "active",
   },
   {
     id: 4,
@@ -33,6 +36,7 @@ const INITIAL_TASKS = [
     priority: "Low",
     description:
       "Inspect damaged bricks and broken tiles and separate unusable items.",
+    status: "inactive",
   },
   {
     id: 5,
@@ -40,16 +44,23 @@ const INITIAL_TASKS = [
     priority: "Critical",
     description:
       "Send helmets, gloves, and safety vests to workers at Site B immediately.",
+    status: "active",
   },
 ];
 
 const PRIORITIES = ["Low", "Medium", "High", "Critical"];
+const STATUSES = ["active", "inactive"];
 
 const PRIORITY_STYLES: Record<string, string> = {
   Low: "bg-slate-100 text-slate-700",
   Medium: "bg-blue-100 text-blue-700",
   High: "bg-orange-100 text-orange-700",
   Critical: "bg-red-100 text-red-700",
+};
+
+const STATUS_STYLES: Record<string, string> = {
+  active: "bg-emerald-100 text-emerald-700",
+  inactive: "bg-rose-100 text-rose-700",
 };
 
 function Badge({ text, className }: any) {
@@ -85,6 +96,7 @@ function TaskForm({ initial, onSubmit, onCancel, title }: any) {
     initial || {
       title: "",
       priority: "Medium",
+      status: "active",
       description: "",
     }
   );
@@ -120,21 +132,40 @@ function TaskForm({ initial, onSubmit, onCancel, title }: any) {
           />
         </div>
 
-        {/* Priority */}
-        <div>
-          <label className="block text-xs font-bold uppercase text-slate-400 mb-2">
-            Priority
-          </label>
+        <div className="grid grid-cols-2 gap-3">
+          {/* Priority */}
+          <div>
+            <label className="block text-xs font-bold uppercase text-slate-400 mb-2">
+              Priority
+            </label>
 
-          <select
-            value={form.priority}
-            onChange={(e) => set("priority", e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-sm"
-          >
-            {PRIORITIES.map((p) => (
-              <option key={p}>{p}</option>
-            ))}
-          </select>
+            <select
+              value={form.priority}
+              onChange={(e) => set("priority", e.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-sm"
+            >
+              {PRIORITIES.map((p) => (
+                <option key={p}>{p}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Status */}
+          <div>
+            <label className="block text-xs font-bold uppercase text-slate-400 mb-2">
+              Status
+            </label>
+
+            <select
+              value={form.status}
+              onChange={(e) => set("status", e.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-sm"
+            >
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>{s === "active" ? "Active" : "Inactive"}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* Description */}
@@ -183,7 +214,7 @@ export default function TaskCRUD() {
     const load = async () => {
       try {
         const remote = await apiFetch('/tasks');
-        if (Array.isArray(remote)) setTasks(remote.map((t: any) => ({ id: t.id, title: t.title, priority: t.priority || 'Medium', description: t.description || '' })));
+        if (Array.isArray(remote)) setTasks(remote.map((t: any) => ({ id: t.id, title: t.title, priority: t.priority || 'Medium', description: t.description || '', status: t.status || 'active' })));
       } catch (err) {
         console.warn('Load tasks failed, using local seed', err);
       }
@@ -198,7 +229,7 @@ export default function TaskCRUD() {
   const createTask = async (data: any) => {
     try {
       const created = await apiFetch('/tasks', { method: 'POST', body: JSON.stringify(data) }).catch(() => null);
-      if (created) setTasks((prev) => [{ id: created.id, title: created.title, priority: created.priority || 'Medium', description: created.description || '' }, ...prev]);
+      if (created) setTasks((prev) => [{ id: created.id, title: created.title, priority: created.priority || 'Medium', description: created.description || '', status: created.status || 'active' }, ...prev]);
       else { setTasks((prev) => [...prev, { ...data, id: nextId }]); setNextId((n) => n + 1); }
     } catch (err) {
       console.error('Create task failed', err);
@@ -265,6 +296,10 @@ export default function TaskCRUD() {
                   Priority
                 </th>
 
+                <th className="px-5 py-3 text-xs uppercase text-slate-400">
+                  Status
+                </th>
+
                 <th className="px-5 py-3 text-right text-xs uppercase text-slate-400">
                   Actions
                 </th>
@@ -291,25 +326,37 @@ export default function TaskCRUD() {
                     />
                   </td>
 
+                  <td className="px-5 py-4">
+                    <Badge
+                      text={task.status === 'active' ? '● Active' : '● Inactive'}
+                      className={STATUS_STYLES[task.status]}
+                    />
+                  </td>
+
                   <td className="px-5 py-4 text-right space-x-2">
                     <button
                       onClick={() => {
                         setSelected(task);
                         setModal("edit");
                       }}
-                      className="px-3 py-1.5 text-xs border rounded-lg"
+                      className="px-3 py-1.5 text-xs border rounded-lg hover:bg-slate-100"
                     >
                       Edit
                     </button>
 
                     <button
-                      onClick={() => {
-                        setSelected(task);
-                        setModal("delete");
+                      onClick={async () => {
+                        try {
+                          const newStatus = task.status === 'active' ? 'inactive' : 'active';
+                          await apiFetch(`/tasks/${task.id}`, { method: 'PUT', body: JSON.stringify({ ...task, status: newStatus }) }).catch(() => null);
+                          setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: newStatus } : t)));
+                        } catch (err) {
+                          console.error('Toggle status failed', err);
+                        }
                       }}
-                      className="px-3 py-1.5 text-xs border rounded-lg text-red-600"
+                      className={`px-3 py-1.5 text-xs border rounded-lg hover:bg-slate-100 ${task.status === 'active' ? 'text-rose-600' : 'text-emerald-600'}`}
                     >
-                      Delete
+                      {task.status === 'active' ? 'Deactivate' : 'Activate'}
                     </button>
                   </td>
                 </tr>
@@ -337,35 +384,6 @@ export default function TaskCRUD() {
             onSubmit={updateTask}
             onCancel={() => setModal(null)}
           />
-        )}
-      </Modal>
-
-      {/* DELETE */}
-      <Modal open={modal === "delete"} onClose={() => setModal(null)}>
-        {selected && (
-          <div className="p-6">
-            <h2 className="text-lg font-bold mb-2">Delete Task</h2>
-
-            <p className="text-sm text-slate-500 mb-6">
-              Delete <b>{selected.title}</b>?
-            </p>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => setModal(null)}
-                className="flex-1 border rounded-lg py-2.5"
-              >
-                Cancel
-              </button>
-
-              <button
-                onClick={deleteTask}
-                className="flex-1 bg-red-600 text-white rounded-lg py-2.5"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
         )}
       </Modal>
     </div>
