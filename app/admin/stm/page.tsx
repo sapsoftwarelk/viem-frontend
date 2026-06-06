@@ -82,6 +82,7 @@ interface Site {
   name: string;
   location: string;
   manager: string;
+  managerHistory: ManagerHistoryEntry[];
   technicalOfficer: string;
   supervisor: string;
   status: "Active" | "Inactive";
@@ -90,6 +91,15 @@ interface Site {
   address: string;
   client: string;
   subLevels: string[];
+}
+
+interface ManagerHistoryEntry {
+  id: string;
+  manager: string;
+  fromDate: string;
+  toDate?: string;
+  changedAt: string;
+  changedBy: string;
 }
 
 interface Employee {
@@ -178,6 +188,10 @@ const SITES: Site[] = [
   {
     id: "site1", code: "SITE-COL-0001", name: "Colombo City Tower",
     location: "Colombo 01", manager: "Anil Perera", technicalOfficer: "Kamala Wijesinghe",
+    managerHistory: [
+      { id: "mh-site1-1", manager: "Saman Jayawardena", fromDate: "2024-01-15", toDate: "2025-12-31", changedAt: "2024-01-15T08:00:00Z", changedBy: "System" },
+      { id: "mh-site1-2", manager: "Anil Perera", fromDate: "2026-01-01", changedAt: "2026-01-01T08:00:00Z", changedBy: "System" },
+    ],
     supervisor: "Ruwantha Bandara", status: "Active",
     startDate: "2024-01-15", expectedEndDate: "2026-12-31",
     address: "25, Lotus Road, Colombo 01", client: "Ceylon Constructions Ltd",
@@ -186,6 +200,10 @@ const SITES: Site[] = [
   {
     id: "site2", code: "SITE-NBO-0001", name: "Nairobi Business Park",
     location: "Nairobi, Kenya", manager: "John Mwangi", technicalOfficer: "Sarah Kimani",
+    managerHistory: [
+      { id: "mh-site2-1", manager: "Mary Wanjiku", fromDate: "2024-06-01", toDate: "2025-03-31", changedAt: "2024-06-01T08:00:00Z", changedBy: "System" },
+      { id: "mh-site2-2", manager: "John Mwangi", fromDate: "2025-04-01", changedAt: "2025-04-01T08:00:00Z", changedBy: "System" },
+    ],
     supervisor: "James Otieno", status: "Active",
     startDate: "2024-06-01", expectedEndDate: "2025-12-31",
     address: "Upper Hill, Nairobi", client: "EastAfrica Realty",
@@ -194,6 +212,9 @@ const SITES: Site[] = [
   {
     id: "site3", code: "SITE-KDY-0001", name: "Kandy Hills Resort",
     location: "Kandy", manager: "Nalini Fernando", technicalOfficer: "Suresh Mendis",
+    managerHistory: [
+      { id: "mh-site3-1", manager: "Nalini Fernando", fromDate: "2025-01-10", changedAt: "2025-01-10T08:00:00Z", changedBy: "System" },
+    ],
     supervisor: "Dilani Rathnayake", status: "Active",
     startDate: "2025-01-10", expectedEndDate: "2026-06-30",
     address: "Peradeniya Road, Kandy", client: "Hilltop Hotels",
@@ -733,7 +754,7 @@ function TransferNoteDrawer({ note, onClose, onUpdateStatus }: any) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function SiteDashboard({ site, onBack, tasks, setTasks, onUpdateSite, employees, vehicles, inventoryItems, allSites }: any) {
-  const [activeTab, setActiveTab] = useState<"tasks" | "transfers" | "vehicles" | "logs">("transfers");
+  const [activeTab, setActiveTab] = useState<"tasks" | "transfers" | "vehicles" | "logs" | "managerHistory">("transfers");
   const [selectedSubLevel, setSelectedSubLevel] = useState<string>("ALL");
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [selectedTransfer, setSelectedTransfer] = useState<any>(null);
@@ -748,7 +769,26 @@ function SiteDashboard({ site, onBack, tasks, setTasks, onUpdateSite, employees,
   const managerOptions = employees.filter((e: any) => e.role === "Site Manager");
 
   const handleSaveManager = () => {
-    const updatedSite = { ...site, manager: managerName.trim() };
+    const nextManager = managerName.trim();
+    if (nextManager === (site.manager || "")) {
+      setIsEditingManager(false);
+      return;
+    }
+    const today = todayStr();
+    const history = site.managerHistory?.length
+      ? site.managerHistory.map((entry: ManagerHistoryEntry, index: number, list: ManagerHistoryEntry[]) => (
+          index === list.length - 1 && !entry.toDate ? { ...entry, toDate: today } : entry
+        ))
+      : site.manager
+        ? [{ id: uid(), manager: site.manager, fromDate: site.startDate || today, toDate: today, changedAt: new Date().toISOString(), changedBy: "System" }]
+        : [];
+    const updatedSite = {
+      ...site,
+      manager: nextManager,
+      managerHistory: nextManager
+        ? [...history, { id: uid(), manager: nextManager, fromDate: today, changedAt: new Date().toISOString(), changedBy: "Admin" }]
+        : history,
+    };
     onUpdateSite(updatedSite);
     setIsEditingManager(false);
   };
@@ -826,6 +866,7 @@ function SiteDashboard({ site, onBack, tasks, setTasks, onUpdateSite, employees,
             <button onClick={() => setActiveTab("tasks")} className={`pb-2 text-[13px] font-semibold ${activeTab === "tasks" ? "text-emerald-600 border-b-2 border-emerald-600" : "text-slate-400"}`}>Tasks</button>
             <button onClick={() => setActiveTab("vehicles")} className={`pb-2 text-[13px] font-semibold ${activeTab === "vehicles" ? "text-emerald-600 border-b-2 border-emerald-600" : "text-slate-400"}`}>Vehicles</button>
             <button onClick={() => setActiveTab("logs")} className={`pb-2 text-[13px] font-semibold ${activeTab === "logs" ? "text-emerald-600 border-b-2 border-emerald-600" : "text-slate-400"}`}>Daily Logs</button>
+            <button onClick={() => setActiveTab("managerHistory")} className={`pb-2 text-[13px] font-semibold ${activeTab === "managerHistory" ? "text-emerald-600 border-b-2 border-emerald-600" : "text-slate-400"}`}>Manager History</button>
           </div>
         </div>
       </div>
@@ -874,6 +915,36 @@ function SiteDashboard({ site, onBack, tasks, setTasks, onUpdateSite, employees,
         )}
         {activeTab === "logs" && (
           <div><h2 className="font-bold mb-4">Daily Logs</h2>{filteredLogs.length === 0 ? <div className="text-center py-12 text-slate-400">No logs.</div> : filteredLogs.map((l:any)=><div key={l.id} className="bg-white border rounded-xl p-3 mb-2">{formatDate(l.date)}: {l.materialsUsed}</div>)}</div>
+        )}
+        {activeTab === "managerHistory" && (
+          <div>
+            <h2 className="font-bold mb-4">Site Manager History</h2>
+            {!site.managerHistory?.length ? (
+              <div className="text-center py-12 text-slate-400">No manager history recorded.</div>
+            ) : (
+              <div className="space-y-3">
+                {[...site.managerHistory].reverse().map((entry: ManagerHistoryEntry) => (
+                  <div key={entry.id} className="bg-white border rounded-xl p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center"><UserCheck size={15} /></div>
+                        <div>
+                          <p className="font-semibold text-slate-800">{entry.manager}</p>
+                          <p className="text-[12px] text-slate-500 mt-1">
+                            {formatDate(entry.fromDate)} to {entry.toDate ? formatDate(entry.toDate) : "Current"}
+                          </p>
+                        </div>
+                      </div>
+                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${entry.toDate ? "bg-slate-100 text-slate-500" : "bg-emerald-50 text-emerald-700"}`}>
+                        {entry.toDate ? "Previous" : "Current"}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-[11px] text-slate-400">Changed by {entry.changedBy} on {formatDate(entry.changedAt)}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
 
