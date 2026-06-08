@@ -1,6 +1,5 @@
 "use client";
-import { Bell, Search, Menu, ChevronDown, LogOut } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { Bell, Search, Menu, ChevronDown } from "lucide-react";
 import Avatar from "@/components/shared/Avatar";
 
 interface AdminTopbarProps {
@@ -8,13 +7,6 @@ interface AdminTopbarProps {
 }
 
 export default function AdminTopbar({ onMenuClick }: AdminTopbarProps) {
-  const router = useRouter();
-
-  const handleLogout = () => {
-    localStorage.removeItem("admin_token");
-    router.push("/login");
-  };
-
   return (
     <header className="h-14 bg-white border-b border-viems-gray-border flex items-center px-4 gap-3 flex-shrink-0 z-30">
       {/* Hamburger — mobile */}
@@ -36,16 +28,6 @@ export default function AdminTopbar({ onMenuClick }: AdminTopbarProps) {
       </div>
 
       <div className="ml-auto flex items-center gap-2">
-        {/* Logout button */}
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-viems-gray-border text-gray-700 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
-          aria-label="Logout"
-        >
-          <LogOut size={14} />
-          <span className="hidden sm:inline text-[12px] font-medium">Logout</span>
-        </button>
-
         {/* User chip */}
         <div className="flex items-center gap-2 border border-viems-gray-border rounded-full pl-1 pr-3 py-1 hover:bg-viems-gray-bg cursor-pointer transition-colors">
           <Avatar initials="MA" color="blue" size="sm" />

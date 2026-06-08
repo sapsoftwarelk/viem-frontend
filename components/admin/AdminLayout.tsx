@@ -1,30 +1,10 @@
 "use client";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import AdminTopbar from "@/components/admin/AdminTopbar";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [checkingAuth, setCheckingAuth] = useState(true);
-  const router = useRouter();
-
-  useEffect(() => {
-    const token = localStorage.getItem("admin_token");
-    if (!token) {
-      router.replace("/login");
-      return;
-    }
-    setCheckingAuth(false);
-  }, [router]);
-
-  if (checkingAuth) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-viems-gray-bg text-sm font-semibold text-gray-500">
-        Checking session...
-      </div>
-    );
-  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-viems-gray-bg">

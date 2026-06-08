@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import {
   Plus, Search, Eye, Pencil, Trash2, X, AlertCircle,
   QrCode, Package, Wrench, RefreshCw, ChevronDown,
@@ -228,11 +227,6 @@ async function apiFetch(path: string, options: RequestInit = {}) {
     "Content-Type": "application/json",
     ...((options.headers as Record<string, string>) || {}),
   };
-
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("admin_token");
-    if (token) headers.Authorization = `Bearer ${token}`;
-  }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
@@ -1240,7 +1234,6 @@ const SEED_ITEMS = [
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function ItemRegistration() {
-  const router = useRouter();
   const [items, setItems] = useState<ItemFormData[]>(SEED_ITEMS);
   const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
   const [search, setSearch] = useState("");
@@ -1253,12 +1246,6 @@ export default function ItemRegistration() {
   const [apiError, setApiError] = useState<string>("");
   const [loading, setLoading] = useState(false);
 
-  const handleAuthFailure = useCallback(() => {
-    localStorage.removeItem("admin_token");
-    setApiError("Your session has expired. Please sign in again.");
-    router.replace("/login");
-  }, [router]);
-
   useEffect(() => {
     const load = async () => {
       try {
@@ -1266,10 +1253,6 @@ export default function ItemRegistration() {
         setSubCategories(categories || []);
       } catch (error: any) {
         console.warn("Unable to load categories from backend:", error);
-        if (error?.status === 401) {
-          handleAuthFailure();
-          return;
-        }
       }
 
       try {
@@ -1279,16 +1262,12 @@ export default function ItemRegistration() {
         setItems(mappedItems);
       } catch (error: any) {
         console.warn("Unable to load items from backend:", error);
-        if (error?.status === 401) {
-          handleAuthFailure();
-          return;
-        }
         setApiError("Unable to connect to the backend item service. Showing local data only.");
       }
     };
 
     load();
-  }, [handleAuthFailure]);
+  }, []);
 
   const create = async (data: ItemFormData) => {
     try {

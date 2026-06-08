@@ -16,11 +16,6 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
     ...(options.headers as Record<string, string> || {}),
   };
 
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("admin_token");
-    if (token) headers.Authorization = `Bearer ${token}`;
-  }
-
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers,
