@@ -1306,7 +1306,7 @@ export default function ItemRegistration() {
       setModal(null);
     } catch (error: any) {
       if (error?.status === 401) {
-        handleAuthFailure();
+        // handleAuthFailure();
         return;
       }
       const message = error?.message || "Unable to create item.";
