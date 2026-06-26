@@ -316,7 +316,7 @@ function RepairNoteFormModal({
       setForm({ ...form, items: newItems });
       return;
     }
-    const newItems = form.items.filter((_, i) => i !== index);
+   const newItems = form.items.filter((_: RepairItem, i: number) => i !== index);
     setForm({ ...form, items: newItems });
   };
 
