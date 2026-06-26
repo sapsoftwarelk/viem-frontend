@@ -294,7 +294,7 @@ function ReturnNoteFormModal({
       setForm({ ...form, items: newItems });
       return;
     }
-    const newItems = form.items.filter((_, i) => i !== index);
+    const newItems = form.items.filter((_, i: number) => i !== index);
     setForm({ ...form, items: newItems });
   };
 
