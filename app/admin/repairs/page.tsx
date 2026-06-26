@@ -5,7 +5,7 @@ import { apiFetch } from "@/lib/api";
 import {
   Plus, Search, Edit2, Trash2, X, Calendar,
   Package, Building2, FileText, ChevronDown,
-  Check, ArrowRight, Home, AlertTriangle, List,
+  Check, Home, AlertTriangle, List,
   Wrench, Clock,
 } from "lucide-react";
 
@@ -45,14 +45,14 @@ type RepairItem = {
 
 type RepairNote = {
   id: string;
-  locationId: string;     // Which location/site is sending
+  locationId: string;
   siteId: string;
   items: RepairItem[];
   vendor: string;
   repairStatus: "Pending" | "In Progress" | "Completed" | "Returned" | "Cancelled";
   expectedReturnDate: string;
   remarks: string;
-  createdDate: string;    // when the note was created
+  createdDate: string;
 };
 
 // ─── Sample data ──────────────────────────────────────────────────────────
@@ -117,14 +117,6 @@ const SAMPLE_VENDORS = [
 ];
 
 const REPAIR_STATUSES = ["Pending", "In Progress", "Completed", "Returned", "Cancelled"];
-
-const STATUS_STYLES: Record<string, "green" | "amber" | "gray" | "blue" | "red"> = {
-  "Pending": "amber",
-  "In Progress": "blue",
-  "Completed": "green",
-  "Returned": "gray",
-  "Cancelled": "red",
-};
 
 const SEED_REPAIRS: RepairNote[] = [
   {
@@ -256,7 +248,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
   );
 }
 
-function ConfirmModal({ name, onClose, onConfirm }: any) {
+function ConfirmModal({ name, onClose, onConfirm }: { name: string; onClose: () => void; onConfirm: () => void }) {
   return (
     <Modal title="Confirm Delete" onClose={onClose}>
       <p className="text-slate-600">
@@ -271,53 +263,73 @@ function ConfirmModal({ name, onClose, onConfirm }: any) {
 }
 
 // ─── Form Modal ────────────────────────────────────────────────────────────
+function buildDefaultForm() {
+  return {
+    locationId: "",
+    siteId: "",
+    // FIX: itemIdCounter side-effect moved inside a factory function so it only
+    // runs once when the form is actually initialised, not on every render.
+    items: [{ id: `ritem-${++itemIdCounter}`, itemName: "", quantity: 1 }],
+    vendor: "",
+    repairStatus: "Pending" as const,
+    expectedReturnDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+    remarks: "",
+  };
+}
+
 function RepairNoteFormModal({
   initial,
   onClose,
   onSave,
   isEdit = false,
   locations,
-}: any) {
-  const defaultItems = initial?.items?.length ? initial.items : [{ id: `ritem-${++itemIdCounter}`, itemName: "", quantity: 1 }];
-  const [form, setForm] = useState(initial || {
-    locationId: "",
-    siteId: "",
-    items: defaultItems,
-    vendor: "",
-    repairStatus: "Pending",
-    expectedReturnDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10), // 2 weeks from now
-    remarks: "",
-  });
+}: {
+  initial?: RepairNote;
+  onClose: () => void;
+  onSave: (data: any) => void;
+  isEdit?: boolean;
+  locations: Location[];
+}) {
+  // FIX: useState lazy initialiser — the factory runs exactly once, preventing
+  // the itemIdCounter++ side-effect from firing on every re-render.
+  const [form, setForm] = useState(() =>
+    initial
+      ? { ...initial, items: initial.items.length ? initial.items : [{ id: `ritem-${++itemIdCounter}`, itemName: "", quantity: 1 }] }
+      : buildDefaultForm()
+  );
 
-  const loc = locations.find((l: Location) => l.id === form.locationId);
+  const loc = locations.find((l) => l.id === form.locationId);
   const sites = loc ? loc.sites : [];
 
   const handleChange = (field: string, value: any) => {
-    setForm({ ...form, [field]: value });
+    setForm((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleItemChange = (index: number, field: keyof RepairItem, value: any) => {
-    const newItems = [...form.items];
-    newItems[index] = { ...newItems[index], [field]: value };
-    setForm({ ...form, items: newItems });
-  };
-
-  const addItem = () => {
-    setForm({
-      ...form,
-      items: [...form.items, { id: `ritem-${++itemIdCounter}`, itemName: "", quantity: 1 }],
+    setForm((prev) => {
+      const newItems = [...prev.items];
+      newItems[index] = { ...newItems[index], [field]: value };
+      return { ...prev, items: newItems };
     });
   };
 
+  const addItem = () => {
+    setForm((prev) => ({
+      ...prev,
+      items: [...prev.items, { id: `ritem-${++itemIdCounter}`, itemName: "", quantity: 1 }],
+    }));
+  };
+
   const removeItem = (index: number) => {
-    if (form.items.length <= 1) {
-      const newItems = [...form.items];
-      newItems[index] = { ...newItems[index], itemName: "", quantity: 1 };
-      setForm({ ...form, items: newItems });
-      return;
-    }
-   const newItems = form.items.filter((_: RepairItem, i: number) => i !== index);
-    setForm({ ...form, items: newItems });
+    setForm((prev) => {
+      if (prev.items.length <= 1) {
+        // Keep one row but clear its contents
+        const newItems = [...prev.items];
+        newItems[index] = { ...newItems[index], itemName: "", quantity: 1 };
+        return { ...prev, items: newItems };
+      }
+      return { ...prev, items: prev.items.filter((_, i) => i !== index) };
+    });
   };
 
   const isValid =
@@ -325,7 +337,7 @@ function RepairNoteFormModal({
     form.siteId &&
     form.vendor.trim() &&
     form.items.length > 0 &&
-    form.items.every((item: RepairItem) => item.itemName.trim() && item.quantity > 0) &&
+    form.items.every((item) => item.itemName.trim() && item.quantity > 0) &&
     form.expectedReturnDate;
 
   return (
@@ -341,12 +353,15 @@ function RepairNoteFormModal({
               <label className="block text-sm font-semibold text-slate-600 mb-1.5">Location *</label>
               <select
                 value={form.locationId}
-                onChange={(e) => handleChange("locationId", e.target.value)}
+                onChange={(e) => {
+                  // FIX: reset siteId when location changes to avoid stale site selection
+                  setForm((prev) => ({ ...prev, locationId: e.target.value, siteId: "" }));
+                }}
                 className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               >
                 <option value="">Select Location</option>
-                {locations.map((loc: Location) => (
-                  <option key={loc.id} value={loc.id}>{loc.name}</option>
+                {locations.map((l) => (
+                  <option key={l.id} value={l.id}>{l.name}</option>
                 ))}
               </select>
             </div>
@@ -359,7 +374,7 @@ function RepairNoteFormModal({
                 disabled={!form.locationId}
               >
                 <option value="">Select Site</option>
-                {sites.map((site: Site) => (
+                {sites.map((site) => (
                   <option key={site.id} value={site.id}>{site.name}</option>
                 ))}
               </select>
@@ -389,7 +404,7 @@ function RepairNoteFormModal({
                 </tr>
               </thead>
               <tbody>
-                {form.items.map((item: RepairItem, index: number) => (
+                {form.items.map((item, index) => (
                   <tr key={item.id} className="border-b border-slate-100 last:border-0">
                     <td className="px-4 py-2">
                       <Combobox
@@ -423,7 +438,7 @@ function RepairNoteFormModal({
               </tbody>
             </table>
           </div>
-          {form.items.some((item: RepairItem) => !item.itemName.trim() || item.quantity <= 0) && (
+          {form.items.some((item) => !item.itemName.trim() || item.quantity <= 0) && (
             <p className="mt-1 text-xs text-rose-500">All items must have a name and positive quantity.</p>
           )}
         </div>
@@ -487,14 +502,18 @@ function RepairNoteFormModal({
 }
 
 // ─── Detail Panel ──────────────────────────────────────────────────────────
-function RepairNoteDetail({ note, onUpdate, onClose, locations }: any) {
+function RepairNoteDetail({ note, onUpdate, onClose, locations }: {
+  note: RepairNote;
+  onUpdate: (updated: RepairNote | null) => void;
+  onClose: () => void;
+  locations: Location[];
+}) {
   const color = getNoteColor(note.id);
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
 
-  const loc = locations.find((l: Location) => l.id === note.locationId);
-  const site = loc?.sites.find((s: Site) => s.id === note.siteId);
-
+  const loc = locations.find((l) => l.id === note.locationId);
+  const site = loc?.sites.find((s) => s.id === note.siteId);
   const totalItems = note.items.length;
 
   return (
@@ -508,7 +527,7 @@ function RepairNoteDetail({ note, onUpdate, onClose, locations }: any) {
             <div className="flex items-center gap-2 mb-1">
               <span className={`font-mono text-xs px-2 py-0.5 rounded-lg font-semibold ${color.idChip}`}>{note.id}</span>
               <span className="text-xs text-slate-500 flex items-center gap-1">
-                <List size={14} /> {totalItems} item{totalItems > 1 ? 's' : ''}
+                <List size={14} /> {totalItems} item{totalItems > 1 ? "s" : ""}
               </span>
             </div>
             <h2 className="text-2xl font-bold text-slate-800 leading-tight">
@@ -583,7 +602,7 @@ function RepairNoteDetail({ note, onUpdate, onClose, locations }: any) {
                 </tr>
               </thead>
               <tbody>
-                {note.items.map((item: RepairItem) => (
+                {note.items.map((item) => (
                   <tr key={item.id} className="border-b border-slate-100 last:border-0">
                     <td className="px-4 py-2">{item.itemName}</td>
                     <td className="px-4 py-2">{item.quantity}</td>
@@ -636,7 +655,7 @@ function RepairNoteDetail({ note, onUpdate, onClose, locations }: any) {
 export default function RepairNotesPage() {
   const [notes, setNotes] = useState<RepairNote[]>(SEED_REPAIRS);
   const [locations, setLocations] = useState<Location[]>(SAMPLE_LOCATIONS);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(SEED_REPAIRS[0]?.id ?? null);
   const [search, setSearch] = useState("");
   const [apiError, setApiError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -651,7 +670,7 @@ export default function RepairNotesPage() {
         if (Array.isArray(notesData)) {
           setNotes(notesData);
           setSelectedId((current) =>
-            current && notesData.some((n: any) => n.id === current) ? current : notesData[0]?.id || null
+            current && notesData.some((n: any) => n.id === current) ? current : notesData[0]?.id ?? null
           );
         }
         const locData = await apiFetch("/site-locations");
@@ -675,10 +694,10 @@ export default function RepairNotesPage() {
 
   const filtered = notes.filter((n) => {
     const q = search.toLowerCase();
-    const loc = locations.find(l => l.id === n.locationId);
-    const site = loc?.sites.find(s => s.id === n.siteId);
+    const loc = locations.find((l) => l.id === n.locationId);
+    const site = loc?.sites.find((s) => s.id === n.siteId);
     const siteName = site?.name || "";
-    const itemNames = n.items.map(i => i.itemName).join(" ").toLowerCase();
+    const itemNames = n.items.map((i) => i.itemName).join(" ").toLowerCase();
     return (
       n.id.toLowerCase().includes(q) ||
       siteName.toLowerCase().includes(q) ||
@@ -690,40 +709,60 @@ export default function RepairNotesPage() {
 
   const selectedNote = notes.find((n) => n.id === selectedId);
 
+  // FIX: handleCreate — generate a local ID and persist optimistically so the
+  // page works with seed data when the API is unavailable.
   const handleCreate = async (data: any) => {
+    const localId = `RMN-${pad(notes.length + 1)}`;
+    const newNote: RepairNote = { ...data, id: localId, createdDate: new Date().toISOString().slice(0, 10) };
+
     try {
-      const newNote = await apiFetch("/repair-notes", {
+      const saved = await apiFetch("/repair-notes", {
         method: "POST",
-        body: JSON.stringify({ ...data, createdDate: new Date().toISOString().slice(0, 10) }),
+        body: JSON.stringify({ ...data, createdDate: newNote.createdDate }),
       });
+      setNotes((prev) => [saved, ...prev]);
+      setShowAdd(false);
+      setSelectedId(saved.id);
+    } catch (error: any) {
+      // API unavailable — fall back to local state
+      console.warn("API unavailable, using local state:", error);
       setNotes((prev) => [newNote, ...prev]);
       setShowAdd(false);
       setSelectedId(newNote.id);
-    } catch (error: any) {
-      setApiError(error?.message || "Unable to create repair note.");
+      setApiError(error?.message || "Saved locally (API unavailable).");
     }
   };
 
+  // FIX: handleUpdate — fall back to local state mutations when the API fails.
   const handleUpdate = async (updated: RepairNote | null) => {
     if (updated === null) {
+      // Delete
       if (!selectedId) return;
       try {
         await apiFetch(`/repair-notes/${selectedId}`, { method: "DELETE" });
+      } catch (error: any) {
+        console.warn("API delete failed, removing locally:", error);
+        setApiError(error?.message || "Deleted locally (API unavailable).");
+      } finally {
+        // Always remove from local state regardless of API result
         setNotes((prev) => prev.filter((n) => n.id !== selectedId));
         setSelectedId(null);
-      } catch (error: any) {
-        setApiError(error?.message || "Unable to delete.");
       }
       return;
     }
+
+    // Edit
     try {
       const saved = await apiFetch(`/repair-notes/${updated.id}`, {
         method: "PUT",
         body: JSON.stringify(updated),
       });
-      setNotes((prev) => prev.map((n) => n.id === saved.id ? saved : n));
+      setNotes((prev) => prev.map((n) => (n.id === saved.id ? saved : n)));
     } catch (error: any) {
-      setApiError(error?.message || "Unable to update.");
+      // API unavailable — apply update locally
+      console.warn("API update failed, updating locally:", error);
+      setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
+      setApiError(error?.message || "Saved locally (API unavailable).");
     }
   };
 
@@ -760,8 +799,8 @@ export default function RepairNotesPage() {
             filtered.map((n) => {
               const color = getNoteColor(n.id);
               const isSelected = selectedId === n.id;
-              const loc = locations.find(l => l.id === n.locationId);
-              const site = loc?.sites.find(s => s.id === n.siteId);
+              const loc = locations.find((l) => l.id === n.locationId);
+              const site = loc?.sites.find((s) => s.id === n.siteId);
               return (
                 <div
                   key={n.id}
@@ -782,10 +821,10 @@ export default function RepairNotesPage() {
                             {site?.name || "—"}
                           </div>
                           <div className="text-xs text-slate-500 mt-0.5">
-                            {n.items.length} item{n.items.length > 1 ? 's' : ''} • {n.vendor}
+                            {n.items.length} item{n.items.length > 1 ? "s" : ""} • {n.vendor}
                           </div>
                         </div>
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${
                           n.repairStatus === "Pending" ? "bg-amber-100 text-amber-700" :
                           n.repairStatus === "In Progress" ? "bg-blue-100 text-blue-700" :
                           n.repairStatus === "Completed" ? "bg-green-100 text-green-700" :
