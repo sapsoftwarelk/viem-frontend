@@ -44,9 +44,9 @@ type ReturnItem = {
 
 type ReturnNote = {
   id: string;
-  fromLocationId: string;   // Returning from
+  fromLocationId: string;
   fromSiteId: string;
-  toLocationId: string;     // Returning to (originating)
+  toLocationId: string;
   toSiteId: string;
   returnDate: string;
   remarks: string;
@@ -232,7 +232,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
   );
 }
 
-function ConfirmModal({ name, onClose, onConfirm }: any) {
+function ConfirmModal({ name, onClose, onConfirm }: { name: string; onClose: () => void; onConfirm: () => void }) {
   return (
     <Modal title="Confirm Delete" onClose={onClose}>
       <p className="text-slate-600">
@@ -247,55 +247,73 @@ function ConfirmModal({ name, onClose, onConfirm }: any) {
 }
 
 // ─── Form Modal ────────────────────────────────────────────────────────────
-function ReturnNoteFormModal({
-  initial,
-  onClose,
-  onSave,
-  isEdit = false,
-  locations,
-}: any) {
-  const defaultItems = initial?.items?.length ? initial.items : [{ id: `ritem-${++itemIdCounter}`, itemName: "", quantity: 1 }];
-  const [form, setForm] = useState(initial || {
+function buildDefaultForm() {
+  return {
     fromLocationId: "",
     fromSiteId: "",
     toLocationId: "",
     toSiteId: "",
     returnDate: new Date().toISOString().slice(0, 10),
     remarks: "",
-    items: defaultItems,
-  });
+    // FIX: itemIdCounter increment isolated here, not at render time
+    items: [{ id: `ritem-${++itemIdCounter}`, itemName: "", quantity: 1 }],
+  };
+}
 
-  const fromLoc = locations.find((l: Location) => l.id === form.fromLocationId);
+function ReturnNoteFormModal({
+  initial,
+  onClose,
+  onSave,
+  isEdit = false,
+  locations,
+}: {
+  initial?: ReturnNote;
+  onClose: () => void;
+  onSave: (data: ReturnNote) => void;
+  isEdit?: boolean;
+  locations: Location[];
+}) {
+  // FIX: lazy initialiser so the factory runs exactly once on mount
+  const [form, setForm] = useState(() =>
+    initial
+      ? { ...initial, items: initial.items.length ? initial.items : [{ id: `ritem-${++itemIdCounter}`, itemName: "", quantity: 1 }] }
+      : buildDefaultForm()
+  );
+
+  const fromLoc = locations.find((l) => l.id === form.fromLocationId);
   const fromSites = fromLoc ? fromLoc.sites : [];
-  const toLoc = locations.find((l: Location) => l.id === form.toLocationId);
+  const toLoc = locations.find((l) => l.id === form.toLocationId);
   const toSites = toLoc ? toLoc.sites : [];
 
-  const handleChange = (field: string, value: any) => {
-    setForm({ ...form, [field]: value });
+  const handleChange = (field: string, value: string) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleItemChange = (index: number, field: keyof ReturnItem, value: any) => {
-    const newItems = [...form.items];
-    newItems[index] = { ...newItems[index], [field]: value };
-    setForm({ ...form, items: newItems });
-  };
-
-  const addItem = () => {
-    setForm({
-      ...form,
-      items: [...form.items, { id: `ritem-${++itemIdCounter}`, itemName: "", quantity: 1 }],
+  const handleItemChange = (index: number, field: keyof ReturnItem, value: string | number) => {
+    setForm((prev) => {
+      const newItems = [...prev.items];
+      newItems[index] = { ...newItems[index], [field]: value };
+      return { ...prev, items: newItems };
     });
   };
 
+  const addItem = () => {
+    setForm((prev) => ({
+      ...prev,
+      items: [...prev.items, { id: `ritem-${++itemIdCounter}`, itemName: "", quantity: 1 }],
+    }));
+  };
+
   const removeItem = (index: number) => {
-    if (form.items.length <= 1) {
-      const newItems = [...form.items];
-      newItems[index] = { ...newItems[index], itemName: "", quantity: 1 };
-      setForm({ ...form, items: newItems });
-      return;
-    }
-    const newItems = form.items.filter((_, i) => i !== index);
-    setForm({ ...form, items: newItems });
+    setForm((prev) => {
+      if (prev.items.length <= 1) {
+        const newItems = [...prev.items];
+        newItems[index] = { ...newItems[index], itemName: "", quantity: 1 };
+        return { ...prev, items: newItems };
+      }
+      // FIX: use ReturnItem (not RepairItem) — correct type for this file
+      return { ...prev, items: prev.items.filter((_: ReturnItem, i: number) => i !== index) };
+    });
   };
 
   const isValid =
@@ -304,12 +322,12 @@ function ReturnNoteFormModal({
     form.toLocationId &&
     form.toSiteId &&
     form.items.length > 0 &&
-    form.items.every((item: ReturnItem) => item.itemName.trim() && item.quantity > 0);
+    form.items.every((item) => item.itemName.trim() && item.quantity > 0);
 
   return (
     <Modal title={isEdit ? "Edit Return Note" : "New Return Note"} onClose={onClose}>
       <div className="space-y-5">
-        {/* From Section (returning from) */}
+        {/* From Section */}
         <div>
           <p className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
             <Building2 size={16} /> Returning From
@@ -319,11 +337,14 @@ function ReturnNoteFormModal({
               <label className="block text-sm font-semibold text-slate-600 mb-1.5">Location *</label>
               <select
                 value={form.fromLocationId}
-                onChange={(e) => handleChange("fromLocationId", e.target.value)}
+                onChange={(e) => {
+                  // FIX: reset fromSiteId when fromLocation changes
+                  setForm((prev) => ({ ...prev, fromLocationId: e.target.value, fromSiteId: "" }));
+                }}
                 className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               >
                 <option value="">Select Location</option>
-                {locations.map((loc: Location) => (
+                {locations.map((loc) => (
                   <option key={loc.id} value={loc.id}>{loc.name}</option>
                 ))}
               </select>
@@ -337,7 +358,7 @@ function ReturnNoteFormModal({
                 disabled={!form.fromLocationId}
               >
                 <option value="">Select Site</option>
-                {fromSites.map((site: Site) => (
+                {fromSites.map((site) => (
                   <option key={site.id} value={site.id}>{site.name}</option>
                 ))}
               </select>
@@ -345,7 +366,7 @@ function ReturnNoteFormModal({
           </div>
         </div>
 
-        {/* To Section (returning to) */}
+        {/* To Section */}
         <div>
           <p className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
             <Home size={16} /> Returning To
@@ -355,11 +376,14 @@ function ReturnNoteFormModal({
               <label className="block text-sm font-semibold text-slate-600 mb-1.5">Location *</label>
               <select
                 value={form.toLocationId}
-                onChange={(e) => handleChange("toLocationId", e.target.value)}
+                onChange={(e) => {
+                  // FIX: reset toSiteId when toLocation changes
+                  setForm((prev) => ({ ...prev, toLocationId: e.target.value, toSiteId: "" }));
+                }}
                 className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               >
                 <option value="">Select Location</option>
-                {locations.map((loc: Location) => (
+                {locations.map((loc) => (
                   <option key={loc.id} value={loc.id}>{loc.name}</option>
                 ))}
               </select>
@@ -373,7 +397,7 @@ function ReturnNoteFormModal({
                 disabled={!form.toLocationId}
               >
                 <option value="">Select Site</option>
-                {toSites.map((site: Site) => (
+                {toSites.map((site) => (
                   <option key={site.id} value={site.id}>{site.name}</option>
                 ))}
               </select>
@@ -414,7 +438,7 @@ function ReturnNoteFormModal({
                 </tr>
               </thead>
               <tbody>
-                {form.items.map((item: ReturnItem, index: number) => (
+                {form.items.map((item, index) => (
                   <tr key={item.id} className="border-b border-slate-100 last:border-0">
                     <td className="px-4 py-2">
                       <Combobox
@@ -448,7 +472,7 @@ function ReturnNoteFormModal({
               </tbody>
             </table>
           </div>
-          {form.items.some((item: ReturnItem) => !item.itemName.trim() || item.quantity <= 0) && (
+          {form.items.some((item) => !item.itemName.trim() || item.quantity <= 0) && (
             <p className="mt-1 text-xs text-rose-500">All items must have a name and positive quantity.</p>
           )}
         </div>
@@ -468,7 +492,7 @@ function ReturnNoteFormModal({
         <div className="flex justify-end gap-3 pt-2">
           <button onClick={onClose} className="btn">Cancel</button>
           <button
-            onClick={() => { if (isValid) onSave(form); }}
+            onClick={() => { if (isValid) onSave(form as ReturnNote); }}
             disabled={!isValid}
             className={`btn btn-primary ${!isValid ? "opacity-50 cursor-not-allowed" : ""}`}
           >
@@ -481,16 +505,20 @@ function ReturnNoteFormModal({
 }
 
 // ─── Detail Panel ──────────────────────────────────────────────────────────
-function ReturnNoteDetail({ note, onUpdate, onClose, locations }: any) {
+function ReturnNoteDetail({ note, onUpdate, onClose, locations }: {
+  note: ReturnNote;
+  onUpdate: (updated: ReturnNote | null) => void;
+  onClose: () => void;
+  locations: Location[];
+}) {
   const color = getNoteColor(note.id);
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
 
-  const fromLoc = locations.find((l: Location) => l.id === note.fromLocationId);
-  const fromSite = fromLoc?.sites.find((s: Site) => s.id === note.fromSiteId);
-  const toLoc = locations.find((l: Location) => l.id === note.toLocationId);
-  const toSite = toLoc?.sites.find((s: Site) => s.id === note.toSiteId);
-
+  const fromLoc = locations.find((l) => l.id === note.fromLocationId);
+  const fromSite = fromLoc?.sites.find((s) => s.id === note.fromSiteId);
+  const toLoc = locations.find((l) => l.id === note.toLocationId);
+  const toSite = toLoc?.sites.find((s) => s.id === note.toSiteId);
   const totalItems = note.items.length;
 
   return (
@@ -504,13 +532,13 @@ function ReturnNoteDetail({ note, onUpdate, onClose, locations }: any) {
             <div className="flex items-center gap-2 mb-1">
               <span className={`font-mono text-xs px-2 py-0.5 rounded-lg font-semibold ${color.idChip}`}>{note.id}</span>
               <span className="text-xs text-slate-500 flex items-center gap-1">
-                <List size={14} /> {totalItems} item{totalItems > 1 ? 's' : ''}
+                <List size={14} /> {totalItems} item{totalItems > 1 ? "s" : ""}
               </span>
             </div>
             <h2 className="text-2xl font-bold text-slate-800 leading-tight">
               {fromSite?.name || "—"} <ArrowRight size={18} className="inline mx-1 text-slate-400" /> {toSite?.name || "—"}
             </h2>
-            <p className={`text-sm text-slate-500 mt-1`}>{note.returnDate}</p>
+            <p className="text-sm text-slate-500 mt-1">{note.returnDate}</p>
           </div>
         </div>
         <button onClick={onClose} className="p-1 rounded-lg hover:bg-white/70 text-slate-400"><X size={18} /></button>
@@ -561,7 +589,7 @@ function ReturnNoteDetail({ note, onUpdate, onClose, locations }: any) {
                 </tr>
               </thead>
               <tbody>
-                {note.items.map((item: ReturnItem) => (
+                {note.items.map((item) => (
                   <tr key={item.id} className="border-b border-slate-100 last:border-0">
                     <td className="px-4 py-2">{item.itemName}</td>
                     <td className="px-4 py-2">{item.quantity}</td>
@@ -596,7 +624,7 @@ function ReturnNoteDetail({ note, onUpdate, onClose, locations }: any) {
           initial={note}
           locations={locations}
           onClose={() => setShowEdit(false)}
-          onSave={(data: any) => { onUpdate({ ...note, ...data }); setShowEdit(false); }}
+          onSave={(data) => { onUpdate({ ...note, ...data }); setShowEdit(false); }}
         />
       )}
       {showDelete && (
@@ -614,7 +642,7 @@ function ReturnNoteDetail({ note, onUpdate, onClose, locations }: any) {
 export default function ReturnNotesPage() {
   const [notes, setNotes] = useState<ReturnNote[]>(SEED_RETURNS);
   const [locations, setLocations] = useState<Location[]>(SAMPLE_LOCATIONS);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(SEED_RETURNS[0]?.id ?? null);
   const [search, setSearch] = useState("");
   const [apiError, setApiError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -629,7 +657,7 @@ export default function ReturnNotesPage() {
         if (Array.isArray(notesData)) {
           setNotes(notesData);
           setSelectedId((current) =>
-            current && notesData.some((n: any) => n.id === current) ? current : notesData[0]?.id || null
+            current && notesData.some((n: ReturnNote) => n.id === current) ? current : notesData[0]?.id ?? null
           );
         }
         const locData = await apiFetch("/site-locations");
@@ -653,13 +681,13 @@ export default function ReturnNotesPage() {
 
   const filtered = notes.filter((n) => {
     const q = search.toLowerCase();
-    const fromLoc = locations.find(l => l.id === n.fromLocationId);
-    const fromSite = fromLoc?.sites.find(s => s.id === n.fromSiteId);
-    const toLoc = locations.find(l => l.id === n.toLocationId);
-    const toSite = toLoc?.sites.find(s => s.id === n.toSiteId);
+    const fromLoc = locations.find((l) => l.id === n.fromLocationId);
+    const fromSite = fromLoc?.sites.find((s) => s.id === n.fromSiteId);
+    const toLoc = locations.find((l) => l.id === n.toLocationId);
+    const toSite = toLoc?.sites.find((s) => s.id === n.toSiteId);
     const fromName = fromSite?.name || "";
     const toName = toSite?.name || "";
-    const itemNames = n.items.map(i => i.itemName).join(" ").toLowerCase();
+    const itemNames = n.items.map((i) => i.itemName).join(" ").toLowerCase();
     return (
       n.id.toLowerCase().includes(q) ||
       fromName.toLowerCase().includes(q) ||
@@ -670,40 +698,55 @@ export default function ReturnNotesPage() {
 
   const selectedNote = notes.find((n) => n.id === selectedId);
 
-  const handleCreate = async (data: any) => {
+  // FIX: generate local ID and fall back to local state when API is unavailable
+  const handleCreate = async (data: ReturnNote) => {
+    const localId = `IRN-${pad(notes.length + 1)}`;
+    const newNote: ReturnNote = { ...data, id: localId };
+
     try {
-      const newNote = await apiFetch("/return-notes", {
+      const saved = await apiFetch("/return-notes", {
         method: "POST",
         body: JSON.stringify(data),
       });
+      setNotes((prev) => [saved, ...prev]);
+      setShowAdd(false);
+      setSelectedId(saved.id);
+    } catch (error: any) {
+      console.warn("API unavailable, using local state:", error);
       setNotes((prev) => [newNote, ...prev]);
       setShowAdd(false);
       setSelectedId(newNote.id);
-    } catch (error: any) {
-      setApiError(error?.message || "Unable to create return note.");
+      setApiError(error?.message || "Saved locally (API unavailable).");
     }
   };
 
+  // FIX: fall back to local state mutations when API fails
   const handleUpdate = async (updated: ReturnNote | null) => {
     if (updated === null) {
       if (!selectedId) return;
       try {
         await apiFetch(`/return-notes/${selectedId}`, { method: "DELETE" });
+      } catch (error: any) {
+        console.warn("API delete failed, removing locally:", error);
+        setApiError(error?.message || "Deleted locally (API unavailable).");
+      } finally {
+        // Always remove from local state regardless of API result
         setNotes((prev) => prev.filter((n) => n.id !== selectedId));
         setSelectedId(null);
-      } catch (error: any) {
-        setApiError(error?.message || "Unable to delete.");
       }
       return;
     }
+
     try {
       const saved = await apiFetch(`/return-notes/${updated.id}`, {
         method: "PUT",
         body: JSON.stringify(updated),
       });
-      setNotes((prev) => prev.map((n) => n.id === saved.id ? saved : n));
+      setNotes((prev) => prev.map((n) => (n.id === saved.id ? saved : n)));
     } catch (error: any) {
-      setApiError(error?.message || "Unable to update.");
+      console.warn("API update failed, updating locally:", error);
+      setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
+      setApiError(error?.message || "Saved locally (API unavailable).");
     }
   };
 
@@ -740,10 +783,10 @@ export default function ReturnNotesPage() {
             filtered.map((n) => {
               const color = getNoteColor(n.id);
               const isSelected = selectedId === n.id;
-              const fromLoc = locations.find(l => l.id === n.fromLocationId);
-              const fromSite = fromLoc?.sites.find(s => s.id === n.fromSiteId);
-              const toLoc = locations.find(l => l.id === n.toLocationId);
-              const toSite = toLoc?.sites.find(s => s.id === n.toSiteId);
+              const fromLoc = locations.find((l) => l.id === n.fromLocationId);
+              const fromSite = fromLoc?.sites.find((s) => s.id === n.fromSiteId);
+              const toLoc = locations.find((l) => l.id === n.toLocationId);
+              const toSite = toLoc?.sites.find((s) => s.id === n.toSiteId);
               return (
                 <div
                   key={n.id}
@@ -758,13 +801,13 @@ export default function ReturnNotesPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-start gap-1">
-                        <div>
+                        <div className="min-w-0">
                           <div className={`font-mono text-[10px] font-semibold ${color.accent}`}>{n.id}</div>
                           <div className="font-semibold text-slate-800 text-sm leading-tight truncate">
                             {fromSite?.name || "—"} <ArrowRight size={12} className="inline mx-0.5" /> {toSite?.name || "—"}
                           </div>
                           <div className="text-xs text-slate-500 mt-0.5">
-                            {n.items.length} item{n.items.length > 1 ? 's' : ''}
+                            {n.items.length} item{n.items.length > 1 ? "s" : ""}
                           </div>
                         </div>
                       </div>

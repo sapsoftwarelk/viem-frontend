@@ -5,7 +5,7 @@ import { apiFetch } from "@/lib/api";
 import {
   Plus, Search, Edit2, Trash2, X, AlertTriangle, Calendar,
   Package, Building2, Users, FileText, ChevronDown,
-  Check, Home,  // <-- Home imported
+  Check, Home,
 } from "lucide-react";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -44,6 +44,17 @@ type Location = { id: string; name: string; sites: Site[] };
 
 type DamageReport = {
   id: string;
+  locationId: string;
+  siteId: string;
+  itemName: string;
+  quantity: number;
+  damageType: string;
+  responsiblePerson: string;
+  reportDate: string;
+  remarks: string;
+};
+
+type DamageReportForm = {
   locationId: string;
   siteId: string;
   itemName: string;
@@ -243,7 +254,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
   );
 }
 
-function ConfirmModal({ name, onClose, onConfirm }: any) {
+function ConfirmModal({ name, onClose, onConfirm }: { name: string; onClose: () => void; onConfirm: () => void }) {
   return (
     <Modal title="Confirm Delete" onClose={onClose}>
       <p className="text-slate-600">
@@ -264,8 +275,14 @@ function DamageReportFormModal({
   onSave,
   isEdit = false,
   locations,
-}: any) {
-  const [form, setForm] = useState(initial || {
+}: {
+  initial?: DamageReportForm;
+  onClose: () => void;
+  onSave: (data: DamageReportForm) => void;
+  isEdit?: boolean;
+  locations: Location[];
+}) {
+  const [form, setForm] = useState<DamageReportForm>(initial ?? {
     locationId: "",
     siteId: "",
     itemName: "",
@@ -280,18 +297,19 @@ function DamageReportFormModal({
 
   useEffect(() => {
     const loc = locations.find((l: Location) => l.id === form.locationId);
-    setAvailableSites(loc ? loc.sites : []);
-    if (form.siteId && !availableSites.some(s => s.id === form.siteId)) {
-      setForm(prev => ({ ...prev, siteId: "" }));
+    const sites = loc ? loc.sites : [];
+    setAvailableSites(sites);
+    if (form.siteId && !sites.some((s: Site) => s.id === form.siteId)) {
+      setForm((prev: DamageReportForm) => ({ ...prev, siteId: "" }));
     }
   }, [form.locationId, locations]);
 
-  const handleChange = (field: string, value: any) => {
-    setForm({ ...form, [field]: value });
-    if (field === "quantity" && (value <= 0 || isNaN(value))) {
+  const handleChange = (field: string, value: string | number) => {
+    setForm((prev: DamageReportForm) => ({ ...prev, [field]: value }));
+    if (field === "quantity" && (Number(value) <= 0 || isNaN(Number(value)))) {
       setErrors(prev => ({ ...prev, quantity: "Quantity must be positive" }));
     } else {
-      setErrors(prev => ({ ...prev, [field]: undefined }));
+      setErrors(prev => { const next = { ...prev }; delete next[field]; return next; });
     }
   };
 
@@ -417,7 +435,17 @@ function DamageReportFormModal({
 }
 
 // ─── Detail Panel ──────────────────────────────────────────────────────────
-function DamageReportDetail({ report, onUpdate, onClose, locations }: any) {
+function DamageReportDetail({
+  report,
+  onUpdate,
+  onClose,
+  locations,
+}: {
+  report: DamageReport;
+  onUpdate: (updated: DamageReport | null) => void;
+  onClose: () => void;
+  locations: Location[];
+}) {
   const color = getReportColor(report.id);
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
@@ -506,7 +534,7 @@ function DamageReportDetail({ report, onUpdate, onClose, locations }: any) {
           initial={report}
           locations={locations}
           onClose={() => setShowEdit(false)}
-          onSave={(data: any) => { onUpdate({ ...report, ...data }); setShowEdit(false); }}
+          onSave={(data: DamageReportForm) => { onUpdate({ ...report, ...data }); setShowEdit(false); }}
         />
       )}
       {showDelete && (
@@ -539,12 +567,12 @@ export default function DamageReportsPage() {
         if (Array.isArray(reportsData)) {
           setReports(reportsData);
           setSelectedId((current) =>
-            current && reportsData.some((r: any) => r.id === current) ? current : reportsData[0]?.id || null
+            current && reportsData.some((r: DamageReport) => r.id === current) ? current : reportsData[0]?.id || null
           );
         }
         const locData = await apiFetch("/site-locations");
         if (Array.isArray(locData)) {
-          const mapped = locData.map((l: any) => ({
+          const mapped: Location[] = locData.map((l: any) => ({
             id: l.id,
             name: l.siteName || l.name,
             sites: (l.subLevels || []).map((s: any) => ({ id: s.id, name: s.name })),
@@ -578,7 +606,7 @@ export default function DamageReportsPage() {
 
   const selectedReport = reports.find((r) => r.id === selectedId);
 
-  const handleCreate = async (data: any) => {
+  const handleCreate = async (data: DamageReportForm) => {
     try {
       const newReport = await apiFetch("/damage-reports", {
         method: "POST",
@@ -605,7 +633,7 @@ export default function DamageReportsPage() {
       return;
     }
     try {
-      const saved = await apiFetch(`/damage-reports/${updated.id}`, {
+      const saved: DamageReport = await apiFetch(`/damage-reports/${updated.id}`, {
         method: "PUT",
         body: JSON.stringify(updated),
       });
