@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { apiFetch } from "../../../lib/api";
 import {
   Plus, Search, Eye, Pencil, Trash2, X, AlertCircle,
   Package, ChevronDown, Hash, Calendar, Filter,
@@ -303,6 +304,48 @@ function uid() { return Math.random().toString(36).slice(2, 9); }
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 function formatDate(d: string) { return new Date(d).toLocaleDateString("en-GB"); }
 function formatDateTime(d: string) { return new Date(d).toLocaleString("en-GB"); }
+
+function mapBackendSite(site: any): Site {
+  return {
+    id: site.id,
+    code: site.id,
+    name: site.siteName || site.name || "",
+    location: site.address || site.region || "",
+    manager: site.manager || "",
+    managerHistory: Array.isArray(site.managerHistory)
+      ? site.managerHistory.map((entry: any) => ({
+          id: entry.id,
+          manager: entry.manager || "",
+          fromDate: entry.fromDate,
+          toDate: entry.toDate || undefined,
+          changedAt: entry.changedAt,
+          changedBy: entry.changedBy || "System",
+        }))
+      : [],
+    technicalOfficer: "",
+    supervisor: "",
+    status: site.status === "Inactive" ? "Inactive" : "Active",
+    startDate: site.startDate ? String(site.startDate).split("T")[0] : "",
+    expectedEndDate: "",
+    address: site.address || "",
+    client: site.client || "",
+    subLevels: Array.isArray(site.subLevels)
+      ? site.subLevels.map((subLevel: any) => typeof subLevel === "string" ? subLevel : subLevel.name).filter(Boolean)
+      : [],
+  };
+}
+
+function sitePayload(site: Site) {
+  return {
+    siteName: site.name,
+    manager: site.manager || "",
+    status: site.status,
+    client: site.client,
+    address: site.address || site.location,
+    startDate: site.startDate || undefined,
+    subLevels: site.subLevels,
+  };
+}
 
 const STATUS_STYLES: Record<TaskStatus, { bg: string; text: string; border: string; dot: string }> = {
   "DRAFT": { bg: "bg-slate-100", text: "text-slate-500", border: "border-slate-200", dot: "bg-slate-400" },
@@ -966,11 +1009,48 @@ export default function SiteTaskManagerPage() {
   const [inventoryItems] = useState(INVENTORY_ITEMS);
   const [tasksBySite, setTasksBySite] = useState<Record<string, SiteTask[]>>(SITE_TASKS_MAP);
   const [search, setSearch] = useState("");
+  const [apiError, setApiError] = useState("");
+
+  useEffect(() => {
+    const loadSites = async () => {
+      try {
+        const result = await apiFetch("/site-locations");
+        const mappedSites = Array.isArray(result) ? result.map(mapBackendSite) : [];
+        if (mappedSites.length > 0) {
+          setSites(mappedSites);
+          setSelectedSite((current) => current ? mappedSites.find((site) => site.id === current.id) || null : null);
+        }
+      } catch (error: any) {
+        setApiError(error?.message || "Unable to load sites from backend. Showing local data.");
+        console.warn("Load STM sites failed:", error);
+      }
+    };
+
+    loadSites();
+  }, []);
 
   const filteredSites = sites.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || s.code.toLowerCase().includes(search.toLowerCase()));
 
   const updateSiteTasks = (siteId: string, newTasks: SiteTask[]) => {
     setTasksBySite(prev => ({ ...prev, [siteId]: newTasks }));
+  };
+
+  const updateSite = async (updatedSite: Site) => {
+    try {
+      setApiError("");
+      const saved = await apiFetch(`/site-locations/${updatedSite.id}`, {
+        method: "PUT",
+        body: JSON.stringify(sitePayload(updatedSite)),
+      });
+      const mapped = mapBackendSite(saved);
+      setSelectedSite(mapped);
+      setSites((prev) => prev.map((site) => site.id === mapped.id ? mapped : site));
+    } catch (error: any) {
+      setApiError(error?.message || "Unable to update site manager.");
+      console.warn("Update STM site failed:", error);
+      setSelectedSite(updatedSite);
+      setSites((prev) => prev.map((site) => site.id === updatedSite.id ? updatedSite : site));
+    }
   };
 
   if (selectedSite) {
@@ -979,10 +1059,7 @@ export default function SiteTaskManagerPage() {
       onBack={() => setSelectedSite(null)}
       tasks={tasksBySite[selectedSite.id] || []}
       setTasks={(newTasks: SiteTask[]) => updateSiteTasks(selectedSite.id, newTasks)}
-      onUpdateSite={(updatedSite: Site) => {
-        setSelectedSite(updatedSite);
-        setSites((prev) => prev.map((s) => s.id === updatedSite.id ? updatedSite : s));
-      }}
+      onUpdateSite={updateSite}
       employees={employees}
       vehicles={vehicles}
       inventoryItems={inventoryItems}
@@ -994,6 +1071,7 @@ export default function SiteTaskManagerPage() {
     <div className="min-h-screen bg-[#f7f8fb] p-5 font-sans">
       <div className="max-w-7xl mx-auto">
         <div className="mb-6"><h1 className="text-[22px] font-extrabold text-slate-800">Site Task Manager</h1><p className="text-[13px] text-slate-400">Manage transfers, tasks, vehicles, and logs per site and sub‑level.</p></div>
+        {apiError && <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-700">{apiError}</div>}
         <div className="bg-white rounded-2xl border p-3 flex gap-3 mb-4"><div className="relative flex-1"><Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2"/><input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Search site..." className="w-full pl-9 pr-3 py-2 border rounded-xl bg-slate-50 text-[12px]" /></div></div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredSites.map(site => (
