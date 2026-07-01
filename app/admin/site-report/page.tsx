@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
+import { apiFetch } from "@/lib/api";
 import {
   Building2, MapPin, Calendar, User, Phone, Mail, FileText,
   Package, Truck, Clock, CheckCircle, AlertCircle, TrendingUp,
@@ -371,13 +372,61 @@ const RETURN_STATUS_STYLES: Record<ReturnStatus, string> = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function SiteReportPage() {
-  const [selectedSiteId, setSelectedSiteId] = useState<string>("site1");
+  const [sites, setSites] = useState<Site[]>([]);
+  const [siteTasks, setSiteTasks] = useState<Record<string, SiteTask[]>>({});
+  const [transferNotes, setTransferNotes] = useState<TransferNote[]>([]);
+  const [returnNotes, setReturnNotes] = useState<SiteReturnNote[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [selectedSiteId, setSelectedSiteId] = useState<string>("");
   const [dateFrom, setDateFrom] = useState<string>("2026-05-01");
   const [dateTo, setDateTo] = useState<string>("2026-05-31");
+  const [apiError, setApiError] = useState("");
   const reportRef = useRef<HTMLDivElement>(null);
 
-  const site = SITES.find(s => s.id === selectedSiteId)!;
-  const tasks = SITE_TASKS[selectedSiteId] || [];
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setApiError("");
+        const [sitesData, tasksData, transfersData, returnsData, itemsData] = await Promise.all([
+          apiFetch("/site-locations"),
+          apiFetch("/tasks"),
+          apiFetch("/transfer-notes"),
+          apiFetch("/return-notes"),
+          apiFetch("/items"),
+        ]);
+
+        const mappedSites = Array.isArray(sitesData) ? sitesData.map(normalizeSite).filter((site) => site.id) : [];
+        const siteNameById = new Map(mappedSites.map((site) => [site.id, site.name]));
+        setSites(mappedSites);
+        setSelectedSiteId((current) => current && mappedSites.some((site) => site.id === current) ? current : mappedSites[0]?.id || "");
+
+        const groupedTasks: Record<string, SiteTask[]> = {};
+        if (Array.isArray(tasksData)) {
+          tasksData.forEach((task: any) => {
+            const siteId = String(task?.siteId || task?.siteLocationId || task?.locationId || "");
+            if (!siteId) return;
+            groupedTasks[siteId] = [...(groupedTasks[siteId] || []), normalizeSiteTask(task)];
+          });
+        }
+        setSiteTasks(groupedTasks);
+
+        setTransferNotes(Array.isArray(transfersData) ? transfersData.map((item) => normalizeTransfer(item, siteNameById)) : []);
+        setReturnNotes(Array.isArray(returnsData) ? returnsData.map((item) => normalizeReturn(item, siteNameById)) : []);
+        setInventoryItems(Array.isArray(itemsData) ? itemsData.map(normalizeSiteStock) : []);
+      } catch (error: any) {
+        console.warn("Using seed site report data", error);
+        setApiError(error?.message || "Unable to load live site report data.");
+        setSites(SITES);
+        setSiteTasks(SITE_TASKS);
+        setInventoryItems(INVENTORY_ITEMS);
+        setSelectedSiteId((current) => current || SITES[0]?.id || "");
+      }
+    };
+    loadData();
+  }, []);
+
+  const site = sites.find(s => s.id === selectedSiteId) || sites[0];
+  const tasks = site ? siteTasks[site.id] || [] : [];
   
   // Filter by date range
   const filteredTasks = tasks.filter(t => {
@@ -387,14 +436,24 @@ export default function SiteReportPage() {
     return taskDate >= from && taskDate <= to;
   });
   
-  const allTransfers = filteredTasks.flatMap(t => t.transferNotes);
-  const allReturns = filteredTasks.flatMap(t => t.returnNotes || []);
+  const noteInRange = (date: string) => {
+    const noteDate = new Date(date || 0);
+    return noteDate >= new Date(dateFrom) && noteDate <= new Date(dateTo);
+  };
+  const allTransfers = [
+    ...filteredTasks.flatMap(t => t.transferNotes),
+    ...transferNotes.filter((tr) => site && tr.toSiteId === site.id && noteInRange(tr.requestedDate)),
+  ];
+  const allReturns = [
+    ...filteredTasks.flatMap(t => t.returnNotes || []),
+    ...returnNotes.filter((ret) => site && ret.siteId === site.id && noteInRange(ret.requestDate)),
+  ];
   const allDailyLogs = filteredTasks.flatMap(t => t.dailyLogs);
   const allVehicles = filteredTasks.flatMap(t => t.assignedVehicles);
-  const siteStock = INVENTORY_ITEMS.map(item => ({
+  const siteStock = inventoryItems.map(item => ({
     name: item.name,
     unit: item.unit,
-    quantity: item.siteStock?.[site.id] || 0,
+    quantity: site ? item.siteStock?.[site.id] || 0 : 0,
     type: item.type
   })).filter(s => s.quantity > 0);
 
@@ -404,6 +463,7 @@ export default function SiteReportPage() {
   const delayedTasks = filteredTasks.filter(t => new Date(t.dueDate) < new Date() && !["COMPLETED", "VERIFIED", "CLOSED"].includes(t.status)).length;
 
   const handlePrint = () => {
+    if (!site) return;
     const printContent = reportRef.current;
     if (!printContent) return;
     const win = window.open("", "_blank", "width=1200,height=800");
@@ -470,6 +530,16 @@ export default function SiteReportPage() {
     setTimeout(() => win.print(), 400);
   };
 
+  if (!site) {
+    return (
+      <div className="min-h-screen bg-[#f7f8fb] p-5 font-sans">
+        <div className="max-w-7xl mx-auto bg-white rounded-2xl border border-slate-100 p-8 text-center text-slate-500">
+          {apiError ? `Live data unavailable: ${apiError}` : "Loading site report data..."}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#f7f8fb] p-5 font-sans">
       <div className="max-w-7xl mx-auto">
@@ -482,7 +552,7 @@ export default function SiteReportPage() {
               <span className="text-[10px] font-bold uppercase text-emerald-600">Site Report</span>
             </div>
             <h1 className="text-[22px] font-extrabold text-slate-800">Site Performance Report</h1>
-            <p className="text-[13px] text-slate-400">Complete operational history and metrics for any site</p>
+            <p className="text-[13px] text-slate-400">{apiError ? `Live data unavailable: ${apiError}` : "Complete operational history and metrics from live site records"}</p>
           </div>
           <div className="flex gap-2">
             <button onClick={handlePrint} className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-xl text-[13px] font-semibold hover:bg-slate-700">
@@ -497,7 +567,7 @@ export default function SiteReportPage() {
             <div className="flex-1 min-w-[200px]">
               <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1">Select Site</label>
               <select value={selectedSiteId} onChange={(e) => setSelectedSiteId(e.target.value)} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] bg-white">
-                {SITES.map(s => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)}
+                {sites.map(s => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)}
               </select>
             </div>
             <div>
@@ -755,4 +825,120 @@ export default function SiteReportPage() {
       </div>
     </div>
   );
+}
+
+function normalizeSite(raw: any): Site {
+  return {
+    id: String(raw?.id || ""),
+    code: String(raw?.id || raw?.code || ""),
+    name: String(raw?.siteName || raw?.name || "Unnamed Site"),
+    location: String(raw?.region || raw?.location || raw?.address || "—"),
+    manager: String(raw?.manager || "—"),
+    technicalOfficer: String(raw?.technicalOfficer || "—"),
+    supervisor: String(raw?.supervisor || "—"),
+    status: String(raw?.status || "Active").toLowerCase().includes("inactive") ? "Inactive" : "Active",
+    startDate: String(raw?.startDate || raw?.createdAt || ""),
+    expectedEndDate: String(raw?.expectedEndDate || ""),
+    address: String(raw?.address || "—"),
+    client: String(raw?.client || "—"),
+    subLevels: (raw?.subLevels || []).map((level: any) => typeof level === "string" ? level : level?.name).filter(Boolean),
+  };
+
+}
+
+function normalizeSiteTask(raw: any): SiteTask {
+  const status = String(raw?.status || "IN_PROGRESS").toUpperCase().replace(/\s+/g, "_") as TaskStatus;
+  const priority = String(raw?.priority || "MEDIUM").toUpperCase() as SiteTask["priority"];
+  return {
+    id: String(raw?.id || raw?.taskId || ""),
+    taskId: String(raw?.taskId || raw?.id || ""),
+    jobName: String(raw?.jobName || raw?.title || "Task"),
+    description: String(raw?.description || ""),
+    priority: ["LOW", "MEDIUM", "HIGH", "URGENT"].includes(priority) ? priority : "MEDIUM",
+    status: STATUS_STYLES[status] ? status : "IN_PROGRESS",
+    taskType: String(raw?.taskType || "GENERAL"),
+    startDate: String(raw?.startDate || raw?.createdAt || new Date().toISOString()),
+    dueDate: String(raw?.dueDate || raw?.updatedAt || raw?.createdAt || new Date().toISOString()),
+    assignedSiteManagerId: String(raw?.assignedSiteManagerId || raw?.managerId || ""),
+    assignedTechnicalOfficerId: String(raw?.assignedTechnicalOfficerId || ""),
+    assignedSupervisorId: String(raw?.assignedSupervisorId || ""),
+    assignedVehicles: [],
+    transferNotes: [],
+    returnNotes: [],
+    dailyLogs: [],
+    createdAt: String(raw?.createdAt || ""),
+    updatedAt: String(raw?.updatedAt || ""),
+    notes: String(raw?.notes || ""),
+    subLevel: String(raw?.subLevel || ""),
+  };
+}
+
+function normalizeTransfer(raw: any, siteNameById: Map<string, string>): TransferNote {
+  const items = (raw?.items || []).map((item: any) => ({
+    id: String(item?.id || item?.itemId || item?.itemName || ""),
+    itemId: String(item?.itemId || ""),
+    itemName: String(item?.itemName || item?.name || "Item"),
+    unit: String(item?.unit || "pcs"),
+    requestedQuantity: Number(item?.quantity || item?.requestedQuantity || 0),
+    issuedQuantity: Number(item?.issuedQuantity || item?.quantity || 0),
+    receivedQuantity: Number(item?.receivedQuantity || 0),
+    availableStock: Number(item?.availableStock || 0),
+  }));
+  return {
+    id: String(raw?.id || ""),
+    transferId: String(raw?.transferId || raw?.id || ""),
+    fromType: "SITE",
+    fromId: String(raw?.fromSiteId || raw?.fromLocationId || ""),
+    fromName: siteNameById.get(String(raw?.fromSiteId)) || siteNameById.get(String(raw?.fromLocationId)) || String(raw?.fromSiteId || raw?.fromLocationId || "—"),
+    toSiteId: String(raw?.toSiteId || raw?.toLocationId || ""),
+    toSubLevel: siteNameById.get(String(raw?.toSiteId)) || "",
+    items,
+    status: String(raw?.status || "COMPLETED").toUpperCase() as TransferStatus,
+    requestedDate: String(raw?.transferDate || raw?.createdAt || ""),
+    requestedBy: String(raw?.requestedBy || "—"),
+    notes: String(raw?.remarks || raw?.notes || ""),
+  };
+}
+
+function normalizeReturn(raw: any, siteNameById: Map<string, string>): SiteReturnNote {
+  const items = (raw?.items || []).map((item: any) => ({
+    id: String(item?.id || item?.itemId || item?.itemName || ""),
+    itemId: String(item?.itemId || ""),
+    itemName: String(item?.itemName || item?.name || "Item"),
+    unit: String(item?.unit || "pcs"),
+    availableStock: Number(item?.availableStock || 0),
+    returnedQuantity: Number(item?.quantity || item?.returnedQuantity || 0),
+    reason: String(item?.reason || ""),
+    condition: "Good" as ReturnItem["condition"],
+  }));
+  return {
+    id: String(raw?.id || ""),
+    returnNumber: String(raw?.returnNumber || raw?.id || ""),
+    siteId: String(raw?.fromSiteId || raw?.fromLocationId || ""),
+    siteName: siteNameById.get(String(raw?.fromSiteId)) || siteNameById.get(String(raw?.fromLocationId)) || "—",
+    subLevel: "",
+    destinationType: "WAREHOUSE",
+    destinationId: String(raw?.toSiteId || raw?.toLocationId || ""),
+    destinationName: siteNameById.get(String(raw?.toSiteId)) || siteNameById.get(String(raw?.toLocationId)) || String(raw?.toSiteId || raw?.toLocationId || "—"),
+    items,
+    status: String(raw?.status || "COMPLETED").toUpperCase() as ReturnStatus,
+    requestDate: String(raw?.returnDate || raw?.createdAt || ""),
+    requestedBy: String(raw?.requestedBy || "—"),
+    notes: String(raw?.remarks || raw?.notes || ""),
+    createdAt: String(raw?.createdAt || ""),
+    updatedAt: String(raw?.updatedAt || ""),
+  };
+}
+
+function normalizeSiteStock(entry: any): InventoryItem {
+  const item = entry?.item ?? entry;
+  const type = String(entry?.type || item?.type || "Consumable").toLowerCase();
+  return {
+    id: String(item?.id || entry?.id || ""),
+    name: String(item?.itemName || item?.name || item?.model || "Item"),
+    type: type === "tool" ? "Tool" : type === "reusable" ? "Reusable" : "Consumable",
+    unit: String(item?.unit || (type === "tool" ? "pcs" : "")),
+    quantity: type === "tool" ? 1 : Number(item?.quantity || item?.pieceNum || 0),
+    siteStock: { [String(item?.locationId || item?.location?.id || "")]: type === "tool" ? 1 : Number(item?.quantity || item?.pieceNum || 0) },
+  };
 }

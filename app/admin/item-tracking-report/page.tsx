@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { apiFetch } from "@/lib/api";
 import {
   Search, ChevronRight, Package, Truck, Undo2, MoveRight,
   ArrowRightLeft, Calendar, Filter, X, Eye, ChevronDown,
@@ -15,6 +16,7 @@ import {
 
 interface Transaction {
   id: string;
+  itemId?: string;
   date: string;
   type: "GRN_IN" | "SRN_OUT" | "ADJUSTMENT_IN" | "ADJUSTMENT_OUT" | "SITE_ISSUE_OUT";
   reference: string;
@@ -92,6 +94,93 @@ function formatDate(d: string) {
   return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+function titleType(type: string) {
+  const lower = String(type || "").toLowerCase();
+  if (lower === "tool") return "Tool";
+  if (lower === "reusable") return "Reusable";
+  if (lower === "consumable") return "Consumable";
+  return "Consumable";
+}
+
+function normalizeTrackingItem(entry: any): InventoryItem {
+  const item = entry?.item ?? entry;
+  const type = titleType(entry?.type || item?.type);
+  const quantity =
+    type === "Tool" ? 1 :
+    type === "Reusable" ? Number(item?.pieceNum || item?.pieceCount || item?.quantity || 1) :
+    Number(item?.quantity || 0);
+
+  return {
+    id: String(item?.id || entry?.id || ""),
+    itemId: String(item?.id || entry?.id || ""),
+    name: String(item?.itemName || item?.name || item?.model || item?.id || "Unnamed Item"),
+    type,
+    categoryCode: item?.subCategory?.code || item?.subCategoryCode || item?.bundleId || "—",
+    unit: item?.unit || (type === "Tool" ? "pcs" : type === "Reusable" ? "pcs" : ""),
+    currentQuantity: quantity,
+    currentLocation: item?.location?.siteName || item?.location?.name || item?.locationId || "Warehouse",
+    status: String(item?.status || "Active"),
+    supplierName: item?.supplier || "—",
+  };
+}
+
+function itemIdFromGinItem(item: any) {
+  return item?.toolId || item?.reusableId || item?.consumableId || item?.itemId || "";
+}
+
+function buildTransactions(grns: any[], gins: any[], itemMap: Map<string, InventoryItem>): Transaction[] {
+  const txs: Transaction[] = [];
+
+  grns.forEach((grn) => {
+    const date = grn?.receivedDate || grn?.document?.createdAt || grn?.createdAt || new Date().toISOString();
+    const reference = grn?.docId || grn?.document?.id || grn?.id || "GRN";
+    const addReceived = (entry: any, type: string) => {
+      const itemId = String(entry?.id || "");
+      if (!itemId) return;
+      const mapped = itemMap.get(itemId);
+      txs.push({
+        id: `${reference}-${itemId}`,
+        itemId,
+        date,
+        type: "GRN_IN",
+        reference,
+        quantity: type === "tool" ? 1 : Number(entry?.quantity || entry?.pieceNum || 1),
+        unit: entry?.unit || mapped?.unit || "pcs",
+        balanceAfter: 0,
+        remarks: "Received into inventory",
+        relatedParty: grn?.supplier || entry?.supplier || mapped?.supplierName,
+      });
+    };
+    (grn?.tools || []).forEach((item: any) => addReceived(item, "tool"));
+    (grn?.consumables || []).forEach((item: any) => addReceived(item, "consumable"));
+    (grn?.reusables || []).forEach((item: any) => addReceived(item, "reusable"));
+  });
+
+  gins.forEach((gin) => {
+    const date = gin?.document?.createdAt || gin?.createdAt || new Date().toISOString();
+    const reference = gin?.docId || gin?.document?.id || gin?.id || "GIN";
+    (gin?.items || []).forEach((item: any) => {
+      const itemId = String(itemIdFromGinItem(item));
+      if (!itemId) return;
+      const mapped = itemMap.get(itemId);
+      txs.push({
+        id: `${reference}-${item?.id || itemId}`,
+        itemId,
+        date,
+        type: "SITE_ISSUE_OUT",
+        reference,
+        quantity: Number(item?.quantity || 1),
+        unit: mapped?.unit || "pcs",
+        balanceAfter: 0,
+        remarks: gin?.isSiteDirect ? "Issued direct to site" : "Issued from warehouse",
+        relatedParty: gin?.siteLocation?.siteName || gin?.siteLocationId || "Site issue",
+      });
+    });
+  });
+
+  return txs;
+}
+
 function getTransactionIcon(type: Transaction["type"]) {
   switch (type) {
     case "GRN_IN": return <Package size={12} className="text-emerald-600" />;
@@ -138,12 +227,13 @@ function ItemTrackingDrawer({ item, transactions, onClose }: { item: InventoryIt
       (item.name === "OPC Cement 50kg" && (t.reference === "GRN-2026-0001" || t.reference === "SITE-REQ-040" || t.reference === "SRN-2026-0001" || t.reference === "GRN-2026-0006")) ||
       (item.name === "T12 Rebar" && (t.reference === "GRN-2026-0002" || t.reference === "SRN-2026-0002" || t.reference === "ADJ-002")) ||
       (item.name === "Ready-mix Concrete Grade 30" && (t.reference === "GRN-2026-0003" || t.reference === "SITE-REQ-035"));
-    return itemNameMatch;
+    return t.itemId ? t.itemId === item.itemId : itemNameMatch;
   }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   let running = 0;
   const enriched = itemTransactions.map(t => {
-    running = t.balanceAfter;
+    const isIn = t.type === "GRN_IN" || t.type === "ADJUSTMENT_IN";
+    running = t.balanceAfter || Math.max(0, running + (isIn ? t.quantity : -t.quantity));
     return { ...t, runningBalance: running };
   });
 
@@ -212,15 +302,44 @@ function ItemTrackingDrawer({ item, transactions, onClose }: { item: InventoryIt
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function ItemTrackingReportPage() {
-  const [items] = useState<InventoryItem[]>(SEED_ITEMS);
-  const [transactions] = useState<Transaction[]>(SEED_TRANSACTIONS);
+  const [items, setItems] = useState<InventoryItem[]>(SEED_ITEMS);
+  const [transactions, setTransactions] = useState<Transaction[]>(SEED_TRANSACTIONS);
+  const [apiError, setApiError] = useState("");
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [filterStockStatus, setFilterStockStatus] = useState("all");
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [showOnlyWithTransactions, setShowOnlyWithTransactions] = useState(false);
 
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setApiError("");
+        const [itemsData, grnsData, ginsData] = await Promise.all([
+          apiFetch("/items"),
+          apiFetch("/goods-received-notes"),
+          apiFetch("/goods-issue-notes"),
+        ]);
+        const mappedItems = Array.isArray(itemsData)
+          ? itemsData.map(normalizeTrackingItem).filter((item) => item.itemId)
+          : [];
+        const itemMap = new Map(mappedItems.map((item) => [item.itemId, item]));
+        setItems(mappedItems);
+        setTransactions(buildTransactions(
+          Array.isArray(grnsData) ? grnsData : [],
+          Array.isArray(ginsData) ? ginsData : [],
+          itemMap,
+        ));
+      } catch (error: any) {
+        console.warn("Using seed item tracking report data", error);
+        setApiError(error?.message || "Unable to load live tracking data.");
+      }
+    };
+    loadData();
+  }, []);
+
   const hasTransactions = (item: InventoryItem) => {
+    if (transactions.some((tx) => tx.itemId === item.itemId)) return true;
     const has = 
       (item.name === "Angle Grinder 230mm") ||
       (item.name === "Rotary Hammer Drill") ||
@@ -260,7 +379,7 @@ export default function ItemTrackingReportPage() {
             <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">Reports</span>
           </div>
           <h1 className="text-[22px] font-extrabold text-slate-800 tracking-tight">Item Tracking Report</h1>
-          <p className="text-[13px] text-slate-400 mt-0.5">Complete audit trail for every inventory item — from receipt to return or site issue.</p>
+          <p className="text-[13px] text-slate-400 mt-0.5">{apiError ? `Live data unavailable: ${apiError}` : "Complete audit trail from live receipts and issue notes."}</p>
         </div>
 
         {/* Stats Cards */}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { apiFetch } from "@/lib/api";
 import {
   Plus, Search, Eye, Pencil, Trash2, X, AlertCircle,
   Package, ChevronDown, Hash, Calendar, Download, Filter,
@@ -227,6 +228,57 @@ function uid() { return Math.random().toString(36).slice(2, 9); }
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 function formatDate(d: string) { return d ? new Date(d).toLocaleDateString("en-GB") : "—"; }
 function fmtNumber(n: number) { return n?.toLocaleString() || "0"; }
+function fmtCurrency(n: number) { return `Rs. ${n.toLocaleString("en-LK")}`; }
+
+function titleType(type: string) {
+  const lower = String(type || "").toLowerCase();
+  if (lower === "tool") return "Tool";
+  if (lower === "reusable") return "Reusable";
+  if (lower === "consumable") return "Consumable";
+  return "Consumable";
+}
+
+function normalizeInventoryItem(entry: any) {
+  const item = entry?.item ?? entry;
+  const type = titleType(entry?.type || item?.type);
+  const subCategory = item?.subCategory;
+  const quantity =
+    type === "Tool" ? 1 :
+    type === "Reusable" ? Number(item?.pieceNum || item?.pieceCount || item?.quantity || 1) :
+    Number(item?.quantity || 0);
+  const unit =
+    item?.unit ||
+    (type === "Tool" ? "pcs" : type === "Reusable" ? "pcs" : "");
+  const status = String(item?.status || "Active")
+    .toLowerCase()
+    .includes("inactive") || String(item?.status || "").toLowerCase().includes("depleted")
+      ? "Inactive"
+      : "Active";
+
+  return {
+    id: String(item?.id || entry?.id || ""),
+    itemId: String(item?.id || entry?.id || ""),
+    name: String(item?.itemName || item?.name || item?.model || item?.id || "Unnamed Item"),
+    type,
+    categoryCode: subCategory?.code || item?.subCategoryCode || item?.bundleId || "—",
+    quantity,
+    unit,
+    unitPrice: Number(item?.unitPrice || item?.price || 0),
+    minStock: type === "Consumable" ? 10 : 1,
+    maxStock: 0,
+    location: item?.location?.siteName || item?.location?.name || item?.locationId || "—",
+    status,
+    supplierId: item?.supplier || "",
+    supplierName: item?.supplier || "—",
+    lastReceived: (item?.receivedDate || item?.purchaseDate || item?.createdAt || "").slice(0, 10),
+    notes: item?.description || "",
+    attributes: {
+      serialNo: item?.serialNumber,
+      maxHours: item?.maxHours,
+      bladeType: item?.bladeType,
+    },
+  };
+}
 
 function generateItemId(type: string, categoryCode: string, existingItems: any[]) {
   const prefix = `${type.toUpperCase().slice(0, 4)}-${categoryCode}-`;
@@ -598,6 +650,7 @@ function ConfirmDeleteModal({ open, onClose, onConfirm, name }: any) {
 export default function WarehouseInventoryPage() {
   const [items, setItems] = useState(SEED_INVENTORY);
   const [suppliers] = useState(SEED_SUPPLIERS);
+  const [apiError, setApiError] = useState("");
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -608,6 +661,22 @@ export default function WarehouseInventoryPage() {
   const [drawerItem, setDrawerItem] = useState<any>(null);
   const [adjustItem, setAdjustItem] = useState<any>(null);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
+
+  useEffect(() => {
+    const loadItems = async () => {
+      try {
+        setApiError("");
+        const data = await apiFetch("/items");
+        if (Array.isArray(data)) {
+          setItems(data.map(normalizeInventoryItem).filter((item) => item.id));
+        }
+      } catch (error: any) {
+        console.warn("Using seed inventory report data", error);
+        setApiError(error?.message || "Unable to load live inventory.");
+      }
+    };
+    loadItems();
+  }, []);
 
   // Stats
   const totalItems = items.length;
@@ -662,7 +731,7 @@ export default function WarehouseInventoryPage() {
               <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">Warehouse</span>
             </div>
             <h1 className="text-[22px] font-extrabold text-slate-800 tracking-tight">Inventory Management</h1>
-            <p className="text-[13px] text-slate-400 mt-0.5">Manage stock items, track quantities, and adjust inventory levels.</p>
+            <p className="text-[13px] text-slate-400 mt-0.5">{apiError ? `Live data unavailable: ${apiError}` : "Live warehouse inventory levels from registered items."}</p>
           </div>
           {/* "New Item" button removed as requested */}
         </div>
@@ -810,7 +879,3 @@ export default function WarehouseInventoryPage() {
   );
 }
 
-// Helper for currency formatting
-function fmtCurrency(n: number) {
-  return n ? `Rs. ${n.toLocaleString("en-LK")}` : "Rs. 0";
-}
