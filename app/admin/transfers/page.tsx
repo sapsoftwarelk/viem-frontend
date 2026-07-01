@@ -39,8 +39,15 @@ type Location = { id: string; name: string; sites: Site[] };
 
 type TransferItem = {
   id: string;
+  itemId?: string;
   itemName: string;
   quantity: number;
+};
+
+type AvailableItem = {
+  id: string;
+  name: string;
+  label: string;
 };
 
 type TransferNote = {
@@ -352,6 +359,7 @@ function TransferNoteFormModal({
   onSave,
   isEdit = false,
   locations,
+  availableItems = [],
 }: any) {
   const defaultItems =
     initial?.items?.length
@@ -426,6 +434,8 @@ function TransferNoteFormModal({
   const hasItemErrors = form.items.some(
     (item: TransferItem) => !item.itemName.trim() || item.quantity <= 0
   );
+
+  const itemOptions = (availableItems.length ? availableItems : []).map((item: AvailableItem) => item.label);
 
   return (
     <Modal
@@ -579,11 +589,13 @@ function TransferNoteFormModal({
                   {/* Item combobox — takes remaining space */}
                   <div className="flex-1 min-w-0">
                     <Combobox
-                      options={SAMPLE_ITEMS}
+                      options={itemOptions.length ? itemOptions : SAMPLE_ITEMS}
                       value={item.itemName}
-                      onChange={(val) =>
-                        handleItemChange(index, "itemName", val)
-                      }
+                      onChange={(val) => {
+                        const matchedItem = availableItems.find((candidate: AvailableItem) => candidate.label === val);
+                        handleItemChange(index, "itemName", matchedItem?.name || val);
+                        handleItemChange(index, "itemId", matchedItem?.id || undefined);
+                      }}
                       placeholder="Select or search item..."
                     />
                   </div>
@@ -695,7 +707,7 @@ function TransferNoteFormModal({
 }
 
 // ─── Detail Panel ──────────────────────────────────────────────────────────
-function TransferNoteDetail({ note, onUpdate, onClose, locations }: any) {
+function TransferNoteDetail({ note, onUpdate, onClose, locations, availableItems }: any) {
   const color = getNoteColor(note.id);
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
@@ -856,6 +868,7 @@ function TransferNoteDetail({ note, onUpdate, onClose, locations }: any) {
           isEdit
           initial={note}
           locations={locations}
+          availableItems={availableItems}
           onClose={() => setShowEdit(false)}
           onSave={(data: any) => {
             onUpdate({ ...note, ...data });
@@ -881,6 +894,7 @@ function TransferNoteDetail({ note, onUpdate, onClose, locations }: any) {
 export default function TransferNotesPage() {
   const [notes, setNotes] = useState<TransferNote[]>(SEED_NOTES);
   const [locations, setLocations] = useState<Location[]>(SAMPLE_LOCATIONS);
+  const [availableItems, setAvailableItems] = useState<AvailableItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [apiError, setApiError] = useState("");
@@ -892,7 +906,12 @@ export default function TransferNotesPage() {
       try {
         setLoading(true);
         setApiError("");
-        const notesData = await apiFetch("/transfer-notes");
+        const [notesData, locData, itemsData] = await Promise.all([
+          apiFetch("/transfer-notes"),
+          apiFetch("/site-locations"),
+          apiFetch("/items"),
+        ]);
+
         if (Array.isArray(notesData)) {
           setNotes(notesData);
           setSelectedId((current) =>
@@ -901,7 +920,6 @@ export default function TransferNotesPage() {
               : notesData[0]?.id || null
           );
         }
-        const locData = await apiFetch("/site-locations");
         if (Array.isArray(locData)) {
           const mapped = locData.map((l: any) => ({
             id: l.id,
@@ -912,6 +930,24 @@ export default function TransferNotesPage() {
             })),
           }));
           setLocations(mapped);
+        }
+        if (Array.isArray(itemsData)) {
+          const mappedItems = itemsData
+            .map((entry: any) => {
+              const item = entry?.item ?? entry;
+              const name = String(
+                item?.itemName || item?.name || item?.model || item?.id || ""
+              ).trim();
+              const id = String(item?.id || entry?.id || "").trim();
+              if (!name || !id) return null;
+              return {
+                id,
+                name,
+                label: name,
+              } as AvailableItem;
+            })
+            .filter(Boolean) as AvailableItem[];
+          setAvailableItems(mappedItems);
         }
       } catch (error: any) {
         console.warn("Using seed data", error);
@@ -1086,6 +1122,7 @@ export default function TransferNotesPage() {
           <TransferNoteDetail
             note={selectedNote}
             locations={locations}
+            availableItems={availableItems}
             onUpdate={handleUpdate}
             onClose={() => setSelectedId(null)}
           />
@@ -1103,6 +1140,7 @@ export default function TransferNotesPage() {
       {showAdd && (
         <TransferNoteFormModal
           locations={locations}
+          availableItems={availableItems}
           onClose={() => setShowAdd(false)}
           onSave={handleCreate}
         />

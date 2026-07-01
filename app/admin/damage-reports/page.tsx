@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import ReactDOM from "react-dom";
 import { apiFetch } from "@/lib/api";
 import {
   Plus, Search, Edit2, Trash2, X, AlertTriangle, Calendar,
@@ -52,6 +53,12 @@ type DamageReport = {
   responsiblePerson: string;
   reportDate: string;
   remarks: string;
+};
+
+type AvailableItem = {
+  id: string;
+  name: string;
+  label: string;
 };
 
 type DamageReportForm = {
@@ -193,12 +200,95 @@ function Combobox({
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+
+  useEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const dropdownHeight = 240;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const showAbove = spaceBelow < dropdownHeight && rect.top > dropdownHeight;
+    setDropdownStyle({
+      position: "fixed",
+      top: showAbove ? rect.top - dropdownHeight - 4 : rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+      zIndex: 9999,
+    });
+    setTimeout(() => searchRef.current?.focus(), 10);
+  }, [open]);
+
+  useEffect(() => {
+    const handleMouseDown = (event: MouseEvent) => {
+      if (
+        triggerRef.current?.contains(event.target as Node) ||
+        dropdownRef.current?.contains(event.target as Node)
+      ) return;
+      setOpen(false);
+      setSearch("");
+    };
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => document.removeEventListener("mousedown", handleMouseDown);
+  }, []);
 
   const filtered = options.filter(opt => opt.toLowerCase().includes(search.toLowerCase()));
 
+  const dropdown = (
+    <div
+      ref={dropdownRef}
+      style={dropdownStyle}
+      className="bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-auto"
+    >
+      <div className="p-2 sticky top-0 bg-white border-b border-slate-100">
+        <input
+          ref={searchRef}
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+          placeholder="Type to filter..."
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setOpen(false);
+              setSearch("");
+            }
+            if (e.key === "Enter" && filtered.length === 1) {
+              onChange(filtered[0]);
+              setOpen(false);
+              setSearch("");
+            }
+          }}
+        />
+      </div>
+      {filtered.length === 0 ? (
+        <div className="p-3 text-sm text-slate-500">No options</div>
+      ) : (
+        filtered.map(opt => (
+          <div
+            key={opt}
+            className="px-4 py-2 hover:bg-slate-50 cursor-pointer text-sm flex items-center justify-between"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onChange(opt);
+              setOpen(false);
+              setSearch("");
+            }}
+          >
+            <span className="truncate">{opt}</span>
+            {value === opt && <Check size={16} className="text-blue-600 flex-shrink-0 ml-2" />}
+          </div>
+        ))
+      )}
+    </div>
+  );
+
   return (
-    <div className="relative">
+    <>
       <div
+        ref={triggerRef}
         className="flex items-center justify-between w-full border border-slate-200 rounded-xl px-4 py-3 text-sm cursor-pointer bg-white hover:border-slate-300 transition"
         onClick={() => setOpen(!open)}
       >
@@ -207,35 +297,8 @@ function Combobox({
         </span>
         <ChevronDown size={16} className="text-slate-400" />
       </div>
-      {open && (
-        <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-auto">
-          <div className="p-2 sticky top-0 bg-white border-b border-slate-100">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-              placeholder="Type to filter..."
-              onClick={(e) => e.stopPropagation()}
-            />
-          </div>
-          {filtered.length === 0 ? (
-            <div className="p-3 text-sm text-slate-500">No options</div>
-          ) : (
-            filtered.map(opt => (
-              <div
-                key={opt}
-                className="px-4 py-2 hover:bg-slate-50 cursor-pointer text-sm flex items-center justify-between"
-                onClick={() => { onChange(opt); setOpen(false); setSearch(""); }}
-              >
-                {opt}
-                {value === opt && <Check size={16} className="text-blue-600" />}
-              </div>
-            ))
-          )}
-        </div>
-      )}
-    </div>
+      {typeof document !== "undefined" && open && ReactDOM.createPortal(dropdown, document.body)}
+    </>
   );
 }
 
@@ -275,12 +338,14 @@ function DamageReportFormModal({
   onSave,
   isEdit = false,
   locations,
+  availableItems = [],
 }: {
   initial?: DamageReportForm;
   onClose: () => void;
   onSave: (data: DamageReportForm) => void;
   isEdit?: boolean;
   locations: Location[];
+  availableItems?: AvailableItem[];
 }) {
   const [form, setForm] = useState<DamageReportForm>(initial ?? {
     locationId: "",
@@ -320,6 +385,10 @@ function DamageReportFormModal({
     form.quantity > 0 &&
     form.responsiblePerson.trim();
 
+  const itemOptions = availableItems.length
+    ? availableItems.map((item) => item.label)
+    : SAMPLE_ITEMS;
+
   return (
     <Modal title={isEdit ? "Edit Damage Report" : "New Damage Report"} onClose={onClose}>
       <div className="space-y-5">
@@ -358,9 +427,12 @@ function DamageReportFormModal({
           <div>
             <label className="block text-sm font-semibold text-slate-600 mb-1.5">Item *</label>
             <Combobox
-              options={SAMPLE_ITEMS}
+              options={itemOptions}
               value={form.itemName}
-              onChange={(val) => handleChange("itemName", val)}
+              onChange={(val) => {
+                const matchedItem = availableItems.find((candidate) => candidate.label === val);
+                handleChange("itemName", matchedItem?.name || val);
+              }}
               placeholder="Search or select an item..."
             />
           </div>
@@ -440,11 +512,13 @@ function DamageReportDetail({
   onUpdate,
   onClose,
   locations,
+  availableItems,
 }: {
   report: DamageReport;
   onUpdate: (updated: DamageReport | null) => void;
   onClose: () => void;
   locations: Location[];
+  availableItems: AvailableItem[];
 }) {
   const color = getReportColor(report.id);
   const [showEdit, setShowEdit] = useState(false);
@@ -533,6 +607,7 @@ function DamageReportDetail({
           isEdit
           initial={report}
           locations={locations}
+          availableItems={availableItems}
           onClose={() => setShowEdit(false)}
           onSave={(data: DamageReportForm) => { onUpdate({ ...report, ...data }); setShowEdit(false); }}
         />
@@ -552,6 +627,7 @@ function DamageReportDetail({
 export default function DamageReportsPage() {
   const [reports, setReports] = useState<DamageReport[]>(SEED_REPORTS);
   const [locations, setLocations] = useState<Location[]>(SAMPLE_LOCATIONS);
+  const [availableItems, setAvailableItems] = useState<AvailableItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [apiError, setApiError] = useState("");
@@ -563,14 +639,17 @@ export default function DamageReportsPage() {
       try {
         setLoading(true);
         setApiError("");
-        const reportsData = await apiFetch("/damage-reports");
+        const [reportsData, locData, itemsData] = await Promise.all([
+          apiFetch("/damage-reports"),
+          apiFetch("/site-locations"),
+          apiFetch("/items"),
+        ]);
         if (Array.isArray(reportsData)) {
           setReports(reportsData);
           setSelectedId((current) =>
             current && reportsData.some((r: DamageReport) => r.id === current) ? current : reportsData[0]?.id || null
           );
         }
-        const locData = await apiFetch("/site-locations");
         if (Array.isArray(locData)) {
           const mapped: Location[] = locData.map((l: any) => ({
             id: l.id,
@@ -578,6 +657,17 @@ export default function DamageReportsPage() {
             sites: (l.subLevels || []).map((s: any) => ({ id: s.id, name: s.name })),
           }));
           setLocations(mapped);
+        }
+        if (Array.isArray(itemsData)) {
+          const mappedItems = itemsData
+            .map((entry: any) => {
+              const item = entry?.item ?? entry;
+              const name = String(item?.itemName || item?.name || item?.model || item?.id || "").trim();
+              const id = String(item?.id || entry?.id || "").trim();
+              return name && id ? { id, name, label: name } : null;
+            })
+            .filter(Boolean) as AvailableItem[];
+          setAvailableItems(mappedItems);
         }
       } catch (error: any) {
         console.warn("Using seed data", error);
@@ -720,6 +810,7 @@ export default function DamageReportsPage() {
           <DamageReportDetail
             report={selectedReport}
             locations={locations}
+            availableItems={availableItems}
             onUpdate={handleUpdate}
             onClose={() => setSelectedId(null)}
           />
@@ -734,6 +825,7 @@ export default function DamageReportsPage() {
       {showAdd && (
         <DamageReportFormModal
           locations={locations}
+          availableItems={availableItems}
           onClose={() => setShowAdd(false)}
           onSave={handleCreate}
         />

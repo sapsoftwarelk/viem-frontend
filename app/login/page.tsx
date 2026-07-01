@@ -1,9 +1,45 @@
 "use client";
 
+import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiFetch, setStoredAuthToken } from "../../lib/api";
 
 export default function AdminLoginPage() {
   const router = useRouter();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const data = await apiFetch("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ username, password }),
+      });
+
+      const token = data?.token || data?.accessToken || data?.access_token;
+      if (!token) {
+        throw new Error("No authentication token returned");
+      }
+
+      setStoredAuthToken(token);
+
+      const user = data?.user ?? data;
+      const roleTitle = String(user?.role?.position_title || user?.role?.name || user?.role?.title || "").toLowerCase();
+      const isAdminRole = ["admin", "super", "manager"].some((keyword) => roleTitle.includes(keyword));
+      const targetRoute = isAdminRole ? "/admin" : "/user";
+      router.replace(targetRoute);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unable to sign in right now.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center p-4 overflow-hidden relative">
@@ -51,22 +87,54 @@ export default function AdminLoginPage() {
           </div>
 
           <div className="mb-8">
-            <h1 className="text-white text-2xl font-bold tracking-tight">Access the system</h1>
-            <p className="text-white/40 text-sm mt-1">
-              Authentication is temporarily disabled. Click below to continue.
-            </p>
+            <h1 className="text-white text-2xl font-bold tracking-tight">Sign in</h1>
+            <p className="text-white/40 text-sm mt-1">Use your backend credentials to access the dashboard.</p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => router.push("/admin")}
-            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg py-3 text-sm transition-all duration-200 shadow-lg shadow-indigo-900/40"
-          >
-            Continue to dashboard
-          </button>
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            <div>
+              <label className="block text-sm text-white/70 mb-2" htmlFor="username">
+                Username or employee ID
+              </label>
+              <input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none ring-0 focus:border-indigo-500"
+                placeholder="Enter username"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm text-white/70 mb-2" htmlFor="password">
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none ring-0 focus:border-indigo-500"
+                placeholder="Enter password"
+                required
+              />
+            </div>
+
+            {error ? <p className="text-sm text-rose-400">{error}</p> : null}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-70 text-white font-semibold rounded-lg py-3 text-sm transition-all duration-200 shadow-lg shadow-indigo-900/40"
+            >
+              {loading ? "Signing in..." : "Sign in"}
+            </button>
+          </form>
 
           <p className="text-white/20 text-[11px] text-center mt-8 tracking-wide">
-            Authentication is off for the demo; it will be added later.
+            Use the credentials created in the backend user management flow.
           </p>
         </div>
 

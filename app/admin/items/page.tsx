@@ -7,6 +7,7 @@ import {
   Hash, Calendar, Download, Filter, Layers, Tag,
   CheckCircle, Clock, Archive, Boxes
 } from "lucide-react";
+import { apiFetch } from "@/lib/api";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -133,8 +134,6 @@ function formatDate(d?: string | Date | null): string {
   return d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-
 const STATUS_DISPLAY = {
   ACTIVE: "Active",
   AVAILABLE: "Available",
@@ -220,26 +219,6 @@ function mapBackendItem(itemRecord: AnyRecord): ItemFormData {
     },
     description: String(item.description || ""),
   };
-}
-
-async function apiFetch(path: string, options: RequestInit = {}) {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...((options.headers as Record<string, string>) || {}),
-  };
-
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
-
-  const body = await response.json().catch(() => null);
-  if (!response.ok) {
-    const error = new Error(body?.message || body?.error || response.statusText || "API request failed") as Error & { status: number };
-    error.status = response.status;
-    throw error;
-  }
-  return body;
 }
 
 function createItemPayload(form: ItemFormData, subCategories: SubCategory[]) {

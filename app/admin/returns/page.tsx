@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import ReactDOM from "react-dom";
 import { apiFetch } from "@/lib/api";
 import {
   Plus, Search, Edit2, Trash2, X, Calendar,
@@ -40,6 +41,12 @@ type ReturnItem = {
   id: string;
   itemName: string;
   quantity: number;
+};
+
+type AvailableItem = {
+  id: string;
+  name: string;
+  label: string;
 };
 
 type ReturnNote = {
@@ -160,13 +167,35 @@ function Combobox({
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+
+  useEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const dropdownHeight = 224;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const showAbove = spaceBelow < dropdownHeight && rect.top > dropdownHeight;
+    setDropdownStyle({
+      position: "fixed",
+      top: showAbove ? rect.top - dropdownHeight - 4 : rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+      zIndex: 9999,
+    });
+    setTimeout(() => searchRef.current?.focus(), 10);
+  }, [open]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
+      if (
+        triggerRef.current?.contains(event.target as Node) ||
+        dropdownRef.current?.contains(event.target as Node)
+      ) return;
+      setOpen(false);
+      setSearch("");
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -174,9 +203,59 @@ function Combobox({
 
   const filtered = options.filter(opt => opt.toLowerCase().includes(search.toLowerCase()));
 
+  const dropdown = (
+    <div
+      ref={dropdownRef}
+      style={dropdownStyle}
+      className="bg-white border border-slate-200 rounded-lg shadow-xl max-h-56 overflow-auto"
+    >
+      <div className="p-2 sticky top-0 bg-white border-b border-slate-100">
+        <input
+          ref={searchRef}
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+          placeholder="Type to filter..."
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setOpen(false);
+              setSearch("");
+            }
+            if (e.key === "Enter" && filtered.length === 1) {
+              onChange(filtered[0]);
+              setOpen(false);
+              setSearch("");
+            }
+          }}
+        />
+      </div>
+      {filtered.length === 0 ? (
+        <div className="p-3 text-sm text-slate-500">No options</div>
+      ) : (
+        filtered.map(opt => (
+          <div
+            key={opt}
+            className="px-4 py-2 hover:bg-slate-50 cursor-pointer text-sm flex items-center justify-between"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onChange(opt);
+              setOpen(false);
+              setSearch("");
+            }}
+          >
+            <span className="truncate">{opt}</span>
+            {value === opt && <Check size={16} className="text-blue-600 flex-shrink-0 ml-2" />}
+          </div>
+        ))
+      )}
+    </div>
+  );
+
   return (
-    <div className="relative" ref={containerRef}>
+    <>
       <div
+        ref={triggerRef}
         className="flex items-center justify-between w-full border border-slate-200 rounded-lg px-3 py-2 text-sm cursor-pointer bg-white hover:border-slate-300 transition"
         onClick={() => setOpen(!open)}
       >
@@ -185,35 +264,8 @@ function Combobox({
         </span>
         <ChevronDown size={16} className="text-slate-400" />
       </div>
-      {open && (
-        <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-auto">
-          <div className="p-2 sticky top-0 bg-white border-b border-slate-100">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-              placeholder="Type to filter..."
-              onClick={(e) => e.stopPropagation()}
-            />
-          </div>
-          {filtered.length === 0 ? (
-            <div className="p-3 text-sm text-slate-500">No options</div>
-          ) : (
-            filtered.map(opt => (
-              <div
-                key={opt}
-                className="px-4 py-2 hover:bg-slate-50 cursor-pointer text-sm flex items-center justify-between"
-                onClick={() => { onChange(opt); setOpen(false); setSearch(""); }}
-              >
-                {opt}
-                {value === opt && <Check size={16} className="text-blue-600" />}
-              </div>
-            ))
-          )}
-        </div>
-      )}
-    </div>
+      {typeof document !== "undefined" && open && ReactDOM.createPortal(dropdown, document.body)}
+    </>
   );
 }
 
@@ -266,12 +318,14 @@ function ReturnNoteFormModal({
   onSave,
   isEdit = false,
   locations,
+  availableItems = [],
 }: {
   initial?: ReturnNote;
   onClose: () => void;
   onSave: (data: ReturnNote) => void;
   isEdit?: boolean;
   locations: Location[];
+  availableItems?: AvailableItem[];
 }) {
   // FIX: lazy initialiser so the factory runs exactly once on mount
   const [form, setForm] = useState(() =>
@@ -323,6 +377,10 @@ function ReturnNoteFormModal({
     form.toSiteId &&
     form.items.length > 0 &&
     form.items.every((item) => item.itemName.trim() && item.quantity > 0);
+
+  const itemOptions = availableItems.length
+    ? availableItems.map((item) => item.label)
+    : SAMPLE_ITEMS;
 
   return (
     <Modal title={isEdit ? "Edit Return Note" : "New Return Note"} onClose={onClose}>
@@ -442,9 +500,12 @@ function ReturnNoteFormModal({
                   <tr key={item.id} className="border-b border-slate-100 last:border-0">
                     <td className="px-4 py-2">
                       <Combobox
-                        options={SAMPLE_ITEMS}
+                        options={itemOptions}
                         value={item.itemName}
-                        onChange={(val) => handleItemChange(index, "itemName", val)}
+                        onChange={(val) => {
+                          const matchedItem = availableItems.find((candidate) => candidate.label === val);
+                          handleItemChange(index, "itemName", matchedItem?.name || val);
+                        }}
                         placeholder="Select item..."
                       />
                     </td>
@@ -505,11 +566,12 @@ function ReturnNoteFormModal({
 }
 
 // ─── Detail Panel ──────────────────────────────────────────────────────────
-function ReturnNoteDetail({ note, onUpdate, onClose, locations }: {
+function ReturnNoteDetail({ note, onUpdate, onClose, locations, availableItems }: {
   note: ReturnNote;
   onUpdate: (updated: ReturnNote | null) => void;
   onClose: () => void;
   locations: Location[];
+  availableItems: AvailableItem[];
 }) {
   const color = getNoteColor(note.id);
   const [showEdit, setShowEdit] = useState(false);
@@ -623,6 +685,7 @@ function ReturnNoteDetail({ note, onUpdate, onClose, locations }: {
           isEdit
           initial={note}
           locations={locations}
+          availableItems={availableItems}
           onClose={() => setShowEdit(false)}
           onSave={(data) => { onUpdate({ ...note, ...data }); setShowEdit(false); }}
         />
@@ -642,6 +705,7 @@ function ReturnNoteDetail({ note, onUpdate, onClose, locations }: {
 export default function ReturnNotesPage() {
   const [notes, setNotes] = useState<ReturnNote[]>(SEED_RETURNS);
   const [locations, setLocations] = useState<Location[]>(SAMPLE_LOCATIONS);
+  const [availableItems, setAvailableItems] = useState<AvailableItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(SEED_RETURNS[0]?.id ?? null);
   const [search, setSearch] = useState("");
   const [apiError, setApiError] = useState("");
@@ -653,14 +717,17 @@ export default function ReturnNotesPage() {
       try {
         setLoading(true);
         setApiError("");
-        const notesData = await apiFetch("/return-notes");
+        const [notesData, locData, itemsData] = await Promise.all([
+          apiFetch("/return-notes"),
+          apiFetch("/site-locations"),
+          apiFetch("/items"),
+        ]);
         if (Array.isArray(notesData)) {
           setNotes(notesData);
           setSelectedId((current) =>
             current && notesData.some((n: ReturnNote) => n.id === current) ? current : notesData[0]?.id ?? null
           );
         }
-        const locData = await apiFetch("/site-locations");
         if (Array.isArray(locData)) {
           const mapped = locData.map((l: any) => ({
             id: l.id,
@@ -668,6 +735,17 @@ export default function ReturnNotesPage() {
             sites: (l.subLevels || []).map((s: any) => ({ id: s.id, name: s.name })),
           }));
           setLocations(mapped);
+        }
+        if (Array.isArray(itemsData)) {
+          const mappedItems = itemsData
+            .map((entry: any) => {
+              const item = entry?.item ?? entry;
+              const name = String(item?.itemName || item?.name || item?.model || item?.id || "").trim();
+              const id = String(item?.id || entry?.id || "").trim();
+              return name && id ? { id, name, label: name } : null;
+            })
+            .filter(Boolean) as AvailableItem[];
+          setAvailableItems(mappedItems);
         }
       } catch (error: any) {
         console.warn("Using seed data", error);
@@ -829,6 +907,7 @@ export default function ReturnNotesPage() {
           <ReturnNoteDetail
             note={selectedNote}
             locations={locations}
+            availableItems={availableItems}
             onUpdate={handleUpdate}
             onClose={() => setSelectedId(null)}
           />
@@ -843,6 +922,7 @@ export default function ReturnNotesPage() {
       {showAdd && (
         <ReturnNoteFormModal
           locations={locations}
+          availableItems={availableItems}
           onClose={() => setShowAdd(false)}
           onSave={handleCreate}
         />
