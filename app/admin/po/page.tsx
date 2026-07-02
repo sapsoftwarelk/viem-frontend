@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { apiFetch } from "../../../lib/api";
 import {
   Plus, Search, Eye, Pencil, Trash2, X, AlertCircle,
   Package, ChevronDown, Hash, Calendar, Download, Filter,
@@ -146,6 +147,53 @@ function formatDate(d: string) {
 }
 function fmtCurrency(n: number) {
   return n ? `Rs. ${n.toLocaleString("en-LK")}` : "—";
+}
+
+function normalizePOStatus(status?: string) {
+  const value = String(status || "").toLowerCase();
+  if (value.includes("approve")) return "Pending Approval";
+  if (value.includes("approve")) return "Pending Approval";
+  if (value.includes("approved")) return "Approved";
+  if (value.includes("ordered")) return "Ordered";
+  if (value.includes("partial")) return "Partially Received";
+  if (value.includes("receive")) return "Received";
+  if (value.includes("cancel")) return "Cancelled";
+  if (value.includes("draft")) return "Draft";
+  return "Draft";
+}
+
+function mapPurchaseOrderToUI(po: any) {
+  const poId = po?.docId || po?.id || po?.poNumber || "";
+  const expectedDate = po?.expectedDate ? new Date(po.expectedDate) : null;
+  return {
+    id: poId,
+    poNumber: poId,
+    status: normalizePOStatus(po?.document?.status || po?.status),
+    supplier: po?.supplier || "",
+    site: po?.site || "",
+    requestedBy: po?.document?.creator?.employee?.fullName || po?.requestedBy || "",
+    approvedBy: po?.document?.isAdminApproved ? "System" : po?.approvedBy || "",
+    createdDate: po?.document?.createdAt ? new Date(po.document.createdAt).toISOString().slice(0, 10) : po?.createdDate || todayStr(),
+    requiredDate: expectedDate ? expectedDate.toISOString().slice(0, 10) : po?.requiredDate || "",
+    deliveredDate: po?.deliveredDate || "",
+    notes: po?.notes || "",
+    lines: Array.isArray(po?.items)
+      ? po.items.map((line: any, index: number) => ({
+          id: line?.id || `${poId}-line-${index + 1}`,
+          itemId: line?.itemId || "",
+          itemName: line?.itemName || line?.description || "",
+          type: line?.type || "Consumable",
+          categoryCode: line?.categoryCode || "",
+          unit: line?.unit || "",
+          qtyOrdered: Number(line?.quantity || 0),
+          qtyReceived: Number(line?.receivedQty || 0),
+          unitPrice: Number(line?.unitPrice || 0),
+          isRegistered: Boolean(line?.itemId),
+        }))
+      : Array.isArray(po?.lines)
+        ? po.lines
+        : [],
+  };
 }
 
 let poCounter = 3;
@@ -1225,6 +1273,24 @@ export default function PurchaseOrderPage() {
   const [target, setTarget]         = useState<any>(null);
   const [drawer, setDrawer]         = useState<any>(null);
   const [reportPO, setReportPO]     = useState<any>(null);
+  const [apiError, setApiError]     = useState("");
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const result = await apiFetch("/purchase-orders");
+        if (Array.isArray(result)) {
+          setPos(result.map(mapPurchaseOrderToUI));
+          setApiError("");
+        }
+      } catch (error: any) {
+        console.warn("Falling back to seeded purchase orders", error);
+        setApiError(error?.message || "Unable to load purchase orders from the API.");
+      }
+    };
+
+    loadData();
+  }, []);
 
   const handleNewItemRegistered = (item: any) => {
     setRegisteredItems((prev) => [...prev, { ...item, itemId: item.itemId, name: item.name, type: item.type, categoryCode: item.categoryCode, unit: item.unit, status: item.status }]);
@@ -1237,9 +1303,47 @@ export default function PurchaseOrderPage() {
     return ms && mst;
   });
 
-  const create = (data: any) => { setPos((p) => [...p, { id: "po" + uid(), ...data }]); setModal(null); };
-  const update = (data: any) => { setPos((p) => p.map((i) => i.id === target.id ? { ...i, ...data } : i)); setModal(null); setDrawer(null); };
-  const remove = ()          => { setPos((p) => p.filter((i) => i.id !== target.id)); setModal(null); setDrawer(null); };
+  const create = async (data: any) => {
+    const payload = {
+      supplier: data.supplier || "",
+      totalCost: (data.lines || []).reduce((sum: number, line: any) => sum + (line.qtyOrdered || 0) * (line.unitPrice || 0), 0),
+      expectedDate: data.requiredDate ? new Date(data.requiredDate) : new Date(),
+      items: (data.lines || []).map((line: any) => ({
+        description: line.itemName || line.name || "",
+        quantity: Number(line.qtyOrdered || 1),
+        unitPrice: Number(line.unitPrice || 0),
+        subCategoryId: 1,
+      })),
+    };
+
+    try {
+      const created = await apiFetch("/purchase-orders", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      const mapped = mapPurchaseOrderToUI(created?.po ? { ...created.po, document: created.document, items: created.items } : created);
+      setPos((p) => [mapped, ...p]);
+      setApiError("");
+      setModal(null);
+    } catch (error: any) {
+      console.warn("API create failed, saving locally", error);
+      setPos((p) => [...p, { id: "po" + uid(), ...data, poNumber: data.poNumber || nextPONumber() }]);
+      setApiError(error?.message || "Saved locally because the API is unavailable.");
+      setModal(null);
+    }
+  };
+
+  const update = (data: any) => {
+    setPos((p) => p.map((i) => i.id === target.id ? { ...i, ...data } : i));
+    setModal(null);
+    setDrawer(null);
+  };
+
+  const remove = () => {
+    setPos((p) => p.filter((i) => i.id !== target.id));
+    setModal(null);
+    setDrawer(null);
+  };
 
   const totalPOs      = pos.length;
   const draftCount    = pos.filter((p) => p.status === "Draft").length;
@@ -1261,6 +1365,12 @@ export default function PurchaseOrderPage() {
       <div className="max-w-6xl mx-auto">
 
         {/* Header */}
+        {apiError && (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-700">
+            {apiError}
+          </div>
+        )}
+
         <div className="mb-6 flex items-start justify-between flex-wrap gap-3">
           <div>
             <div className="flex items-center gap-2 mb-1">

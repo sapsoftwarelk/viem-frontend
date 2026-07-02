@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { apiFetch } from "../../../lib/api";
 import {
   Plus, Search, Eye, Pencil, Trash2, X, AlertCircle,
   Package, ChevronDown, Hash, Calendar, Download, Filter,
@@ -166,6 +167,45 @@ function formatDate(d: string) {
 }
 function fmtCurrency(n: number) {
   return n ? `Rs. ${n.toLocaleString("en-LK")}` : "Rs. 0";
+}
+
+function normalizeSRNStatus(status?: string) {
+  const value = String(status || "").toLowerCase();
+  if (value.includes("submit")) return "Submitted";
+  if (value.includes("approve")) return "Approved";
+  if (value.includes("return")) return "Returned";
+  if (value.includes("cancel")) return "Cancelled";
+  if (value.includes("draft")) return "Draft";
+  return "Draft";
+}
+
+function mapSRNToUI(note: any) {
+  return {
+    id: note?.id || note?.returnNumber || "",
+    returnNumber: note?.returnNumber || note?.id || "",
+    supplierId: note?.supplierId || "",
+    supplierName: note?.supplierName || note?.supplier?.name || note?.supplier || "",
+    returnDate: note?.returnDate || (note?.createdAt ? new Date(note.createdAt).toISOString().slice(0, 10) : ""),
+    status: normalizeSRNStatus(note?.status),
+    reason: note?.reason || "",
+    notes: note?.notes || "",
+    totalItems: note?.totalItems ?? (Array.isArray(note?.lines) ? note.lines.reduce((sum: number, line: any) => sum + Number(line?.quantity || 0), 0) : 0),
+    totalValue: note?.totalValue ?? (Array.isArray(note?.lines) ? note.lines.reduce((sum: number, line: any) => sum + Number(line?.total ?? (line?.quantity || 0) * (line?.unitPrice || 0)), 0) : 0),
+    createdBy: note?.createdBy || "",
+    createdAt: note?.createdAt ? new Date(note.createdAt).toISOString().slice(0, 10) : "",
+    lines: Array.isArray(note?.lines)
+      ? note.lines.map((line: any, index: number) => ({
+          id: line?.id || `${note?.id || note?.returnNumber || "srn"}-${index + 1}`,
+          itemName: line?.itemName || "",
+          quantity: Number(line?.quantity || 0),
+          unit: line?.unit || "",
+          unitPrice: Number(line?.unitPrice || 0),
+          total: Number(line?.total ?? (line?.quantity || 0) * (line?.unitPrice || 0)),
+          condition: line?.condition || "",
+          reason: line?.reason || "",
+        }))
+      : [],
+  };
 }
 
 let srnCounter = 3;
@@ -698,6 +738,7 @@ export default function SupplierReturnNotePage() {
   const [editingSRN, setEditingSRN] = useState<any>(null);
   const [drawerSRN, setDrawerSRN] = useState<any>(null);
   const [deleteSRNTarget, setDeleteSRNTarget] = useState<any>(null);
+  const [apiError, setApiError] = useState("");
 
   // Derived stats
   const totalReturns = returnNotes.length;
@@ -705,6 +746,23 @@ export default function SupplierReturnNotePage() {
   const draftCount = returnNotes.filter((n) => n.status === "Draft").length;
   const submittedCount = returnNotes.filter((n) => n.status === "Submitted").length;
   const approvedCount = returnNotes.filter((n) => n.status === "Approved").length;
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const result = await apiFetch("/return-notes");
+        if (Array.isArray(result)) {
+          setReturnNotes(result.map(mapSRNToUI));
+          setApiError("");
+        }
+      } catch (error: any) {
+        console.warn("Falling back to seeded supplier returns", error);
+        setApiError(error?.message || "Unable to load supplier returns from the API.");
+      }
+    };
+
+    loadData();
+  }, []);
 
   // Filtered return notes
   const filteredReturns = returnNotes.filter((rn) => {
@@ -739,24 +797,63 @@ export default function SupplierReturnNotePage() {
   };
 
   // Return Note CRUD
-  const createSRN = (data: any) => {
-    const newNote = {
+  const createSRN = async (data: any) => {
+    const payload = {
       ...data,
-      id: uid(),
-      returnNumber: nextSRNNumber(),
+      returnNumber: data.returnNumber || nextSRNNumber(),
+      createdBy: data.createdBy || "System",
       createdAt: todayStr(),
+      supplierName: suppliers.find((s) => s.id === data.supplierId)?.name || "",
+      lines: data.lines || [],
     };
-    setReturnNotes((prev) => [newNote, ...prev]);
-    setSrnModalOpen(false);
+
+    try {
+      const created = await apiFetch("/return-notes", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      setReturnNotes((prev) => [mapSRNToUI(created), ...prev]);
+      setApiError("");
+      setSrnModalOpen(false);
+      setEditingSRN(null);
+    } catch (error: any) {
+      const newNote = {
+        ...payload,
+        id: uid(),
+        status: payload.status || "Draft",
+        totalItems: payload.lines.reduce((s: number, l: any) => s + l.quantity, 0),
+        totalValue: payload.lines.reduce((s: number, l: any) => s + (l.total || (l.quantity * l.unitPrice)), 0),
+      };
+      setReturnNotes((prev) => [newNote, ...prev]);
+      setApiError(error?.message || "Saved locally because the API is unavailable.");
+      setSrnModalOpen(false);
+      setEditingSRN(null);
+    }
   };
-  const updateSRN = (data: any) => {
-    setReturnNotes((prev) => prev.map((n) => (n.id === editingSRN.id ? { ...data, id: n.id } : n)));
+  const updateSRN = async (data: any) => {
+    try {
+      const saved = await apiFetch(`/return-notes/${editingSRN.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ ...editingSRN, ...data, id: editingSRN.id }),
+      });
+      setReturnNotes((prev) => prev.map((n) => (n.id === editingSRN.id ? mapSRNToUI(saved) : n)));
+      setApiError("");
+    } catch (error: any) {
+      setReturnNotes((prev) => prev.map((n) => (n.id === editingSRN.id ? { ...n, ...data } : n)));
+      setApiError(error?.message || "Updated locally because the API is unavailable.");
+    }
     setSrnModalOpen(false);
     setEditingSRN(null);
     setDrawerSRN(null);
   };
-  const deleteSRN = () => {
+  const deleteSRN = async () => {
     if (deleteSRNTarget) {
+      try {
+        await apiFetch(`/return-notes/${deleteSRNTarget.id}`, { method: "DELETE" });
+        setApiError("");
+      } catch (error: any) {
+        setApiError(error?.message || "Deleted locally because the API is unavailable.");
+      }
       setReturnNotes((prev) => prev.filter((n) => n.id !== deleteSRNTarget.id));
       setDeleteSRNTarget(null);
       setDrawerSRN(null);
@@ -767,6 +864,12 @@ export default function SupplierReturnNotePage() {
     <div className="min-h-screen bg-[#f7f8fb] p-5 font-sans">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
+        {apiError && (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-700">
+            {apiError}
+          </div>
+        )}
+
         <div className="mb-6 flex items-start justify-between flex-wrap gap-3">
           <div>
             <div className="flex items-center gap-2 mb-1">
