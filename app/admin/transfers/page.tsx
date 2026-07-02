@@ -62,6 +62,39 @@ type TransferNote = {
 };
 
 // ─── Sample data ──────────────────────────────────────────────────────────
+function textValue(value: any, fallback = "") {
+  if (value == null) return fallback;
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (typeof value === "object") {
+    return textValue(value.itemName || value.name || value.model || value.label || value.id, fallback);
+  }
+  return fallback;
+}
+
+function normalizeTransferItem(item: any, index: number): TransferItem {
+  return {
+    id: textValue(item?.id, `item-${index + 1}`),
+    itemId: item?.itemId ? textValue(item.itemId) : undefined,
+    itemName: textValue(item?.itemName || item?.name || item?.item || item, `Item ${index + 1}`),
+    quantity: Number(item?.quantity || 1),
+  };
+}
+
+function normalizeTransferNote(note: any, fallbackIndex = 0): TransferNote {
+  const items = Array.isArray(note?.items) ? note.items : [];
+  return {
+    id: textValue(note?.id, `ITN-${pad(fallbackIndex + 1)}`),
+    fromLocationId: textValue(note?.fromLocationId),
+    fromSiteId: textValue(note?.fromSiteId),
+    toLocationId: textValue(note?.toLocationId),
+    toSiteId: textValue(note?.toSiteId),
+    transferDate: textValue(note?.transferDate, new Date().toISOString().slice(0, 10)),
+    remarks: textValue(note?.remarks),
+    items: items.map(normalizeTransferItem),
+  };
+}
+
 const SAMPLE_LOCATIONS: Location[] = [
   {
     id: "LOC-ADM-0001",
@@ -111,6 +144,29 @@ const SAMPLE_ITEMS = [
   "Generator",
   "Water Pump",
 ];
+
+function mapInventoryOptions(itemsData: any[]): AvailableItem[] {
+  return itemsData
+    .map((entry: any) => {
+      const item = entry?.item ?? entry;
+      const name = textValue(
+        item?.itemName || item?.name || item?.model || item?.id || ""
+      ).trim();
+      const id = textValue(item?.id || entry?.id || name).trim();
+      if (!name || !id) return null;
+      return {
+        id,
+        name,
+        label: name,
+      } as AvailableItem;
+    })
+    .filter(Boolean) as AvailableItem[];
+}
+
+function getItemOptions(availableItems: AvailableItem[]) {
+  const liveOptions = availableItems.map((item) => item.label).filter(Boolean);
+  return liveOptions.length ? liveOptions : SAMPLE_ITEMS;
+}
 
 const SEED_NOTES: TransferNote[] = [
   {
@@ -435,7 +491,7 @@ function TransferNoteFormModal({
     (item: TransferItem) => !item.itemName.trim() || item.quantity <= 0
   );
 
-  const itemOptions = (availableItems.length ? availableItems : []).map((item: AvailableItem) => item.label);
+  const itemOptions = getItemOptions(availableItems);
 
   return (
     <Modal
@@ -589,7 +645,7 @@ function TransferNoteFormModal({
                   {/* Item combobox — takes remaining space */}
                   <div className="flex-1 min-w-0">
                     <Combobox
-                      options={itemOptions.length ? itemOptions : SAMPLE_ITEMS}
+                      options={itemOptions}
                       value={item.itemName}
                       onChange={(val) => {
                         const matchedItem = availableItems.find((candidate: AvailableItem) => candidate.label === val);
@@ -825,8 +881,8 @@ function TransferNoteDetail({ note, onUpdate, onClose, locations, availableItems
                     key={item.id}
                     className="border-b border-slate-100 last:border-0"
                   >
-                    <td className="px-4 py-2">{item.itemName}</td>
-                    <td className="px-4 py-2">{item.quantity}</td>
+                    <td className="px-4 py-2">{textValue(item.itemName)}</td>
+                    <td className="px-4 py-2">{Number(item.quantity || 0)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -906,48 +962,45 @@ export default function TransferNotesPage() {
       try {
         setLoading(true);
         setApiError("");
-        const [notesData, locData, itemsData] = await Promise.all([
+        const [notesResult, locResult, itemsResult] = await Promise.allSettled([
           apiFetch("/transfer-notes"),
           apiFetch("/site-locations"),
           apiFetch("/items"),
         ]);
 
-        if (Array.isArray(notesData)) {
-          setNotes(notesData);
+        const notesData = notesResult.status === "fulfilled" ? notesResult.value : null;
+        const locData = locResult.status === "fulfilled" ? locResult.value : null;
+        const itemsData = itemsResult.status === "fulfilled" ? itemsResult.value : null;
+
+        if (Array.isArray(notesData) && notesData.length > 0) {
+          const mappedNotes = notesData.map(normalizeTransferNote);
+          setNotes(mappedNotes);
           setSelectedId((current) =>
-            current && notesData.some((n: any) => n.id === current)
+            current && mappedNotes.some((n: any) => n.id === current)
               ? current
-              : notesData[0]?.id || null
+              : mappedNotes[0]?.id || null
           );
         }
-        if (Array.isArray(locData)) {
+        if (Array.isArray(locData) && locData.length > 0) {
           const mapped = locData.map((l: any) => ({
             id: l.id,
             name: l.siteName || l.name,
-            sites: (l.subLevels || []).map((s: any) => ({
+            sites: (Array.isArray(l.subLevels) ? l.subLevels : []).map((s: any) => ({
               id: s.id,
               name: s.name,
             })),
-          }));
-          setLocations(mapped);
+          })).filter((l: Location) => l.id && l.name && l.sites.length > 0);
+          if (mapped.length > 0) {
+            setLocations(mapped);
+          }
         }
-        if (Array.isArray(itemsData)) {
-          const mappedItems = itemsData
-            .map((entry: any) => {
-              const item = entry?.item ?? entry;
-              const name = String(
-                item?.itemName || item?.name || item?.model || item?.id || ""
-              ).trim();
-              const id = String(item?.id || entry?.id || "").trim();
-              if (!name || !id) return null;
-              return {
-                id,
-                name,
-                label: name,
-              } as AvailableItem;
-            })
-            .filter(Boolean) as AvailableItem[];
+        if (Array.isArray(itemsData) && itemsData.length > 0) {
+          const mappedItems = mapInventoryOptions(itemsData);
           setAvailableItems(mappedItems);
+        }
+        const failures = [notesResult, locResult, itemsResult].filter((result) => result.status === "rejected");
+        if (failures.length > 0) {
+          setApiError("Some live data is unavailable; showing saved and sample options.");
         }
       } catch (error: any) {
         console.warn("Using seed data", error);
@@ -965,9 +1018,9 @@ export default function TransferNotesPage() {
     const fromSite = fromLoc?.sites.find((s) => s.id === n.fromSiteId);
     const toLoc = locations.find((l) => l.id === n.toLocationId);
     const toSite = toLoc?.sites.find((s) => s.id === n.toSiteId);
-    const itemNames = n.items.map((i) => i.itemName).join(" ").toLowerCase();
+    const itemNames = n.items.map((i) => textValue(i.itemName)).join(" ").toLowerCase();
     return (
-      n.id.toLowerCase().includes(q) ||
+      textValue(n.id).toLowerCase().includes(q) ||
       (fromSite?.name || "").toLowerCase().includes(q) ||
       (toSite?.name || "").toLowerCase().includes(q) ||
       itemNames.includes(q)
@@ -982,9 +1035,10 @@ export default function TransferNotesPage() {
         method: "POST",
         body: JSON.stringify(data),
       });
-      setNotes((prev) => [newNote, ...prev]);
+      const mappedNote = normalizeTransferNote(newNote);
+      setNotes((prev) => [mappedNote, ...prev]);
       setShowAdd(false);
-      setSelectedId(newNote.id);
+      setSelectedId(mappedNote.id);
     } catch (error: any) {
       setApiError(error?.message || "Unable to create note.");
     }
@@ -1007,7 +1061,8 @@ export default function TransferNotesPage() {
         method: "PUT",
         body: JSON.stringify(updated),
       });
-      setNotes((prev) => prev.map((n) => (n.id === saved.id ? saved : n)));
+      const mappedNote = normalizeTransferNote(saved);
+      setNotes((prev) => prev.map((n) => (n.id === mappedNote.id ? mappedNote : n)));
     } catch (error: any) {
       setApiError(error?.message || "Unable to update.");
     }

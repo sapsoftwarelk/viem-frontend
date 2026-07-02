@@ -226,6 +226,52 @@ function normalizeGRNStatus(status?: string) {
   return "Draft";
 }
 
+function normalizePOStatus(status?: string) {
+  const value = String(status || "").toLowerCase();
+  if (value.includes("approve")) return "Pending Approval";
+  if (value.includes("approved")) return "Approved";
+  if (value.includes("ordered")) return "Ordered";
+  if (value.includes("partial")) return "Partially Received";
+  if (value.includes("receive")) return "Received";
+  if (value.includes("cancel")) return "Cancelled";
+  if (value.includes("draft")) return "Draft";
+  return "Draft";
+}
+
+function mapPurchaseOrderToUI(po: any) {
+  const poId = po?.docId || po?.id || po?.poNumber || "";
+  const expectedDate = po?.expectedDate ? new Date(po.expectedDate) : null;
+  return {
+    id: poId,
+    poNumber: poId,
+    status: normalizePOStatus(po?.document?.status || po?.status),
+    supplier: po?.supplier || "",
+    site: po?.site || "",
+    requestedBy: po?.document?.creator?.employee?.fullName || po?.requestedBy || "",
+    approvedBy: po?.document?.isAdminApproved ? "System" : po?.approvedBy || "",
+    createdDate: po?.document?.createdAt ? new Date(po.document.createdAt).toISOString().slice(0, 10) : po?.createdDate || todayStr(),
+    requiredDate: expectedDate ? expectedDate.toISOString().slice(0, 10) : po?.requiredDate || "",
+    deliveredDate: po?.deliveredDate || "",
+    notes: po?.notes || "",
+    lines: Array.isArray(po?.items)
+      ? po.items.map((line: any, index: number) => ({
+          id: line?.id || `${poId}-line-${index + 1}`,
+          itemId: line?.itemId || "",
+          itemName: line?.itemName || line?.description || "",
+          type: line?.type || "Consumable",
+          categoryCode: line?.categoryCode || "",
+          unit: line?.unit || "",
+          qtyOrdered: Number(line?.quantity || 0),
+          qtyReceived: Number(line?.receivedQty || 0),
+          unitPrice: Number(line?.unitPrice || 0),
+          isRegistered: Boolean(line?.itemId),
+        }))
+      : Array.isArray(po?.lines)
+        ? po.lines
+        : [],
+  };
+}
+
 function mapGRNToUI(grn: any) {
   const grnId = grn?.docId || grn?.id || grn?.grnNumber || "";
   const tools = (Array.isArray(grn?.tools) ? grn.tools : []).map((item: any) => ({
@@ -1233,14 +1279,23 @@ export default function GoodsReceivedNotePage() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const result = await apiFetch("/goods-received-notes");
-        if (Array.isArray(result)) {
-          setGrns(result.map(mapGRNToUI));
-          setApiError("");
+        const [grnResult, poResult] = await Promise.all([
+          apiFetch("/goods-received-notes"),
+          apiFetch("/purchase-orders"),
+        ]);
+
+        if (Array.isArray(grnResult)) {
+          setGrns(grnResult.map(mapGRNToUI));
         }
+
+        if (Array.isArray(poResult)) {
+          setPos(poResult.map(mapPurchaseOrderToUI));
+        }
+
+        setApiError("");
       } catch (error: any) {
-        console.warn("Falling back to seeded GRNs", error);
-        setApiError(error?.message || "Unable to load goods received notes from the API.");
+        console.warn("Falling back to seeded GRNs/POs", error);
+        setApiError(error?.message || "Unable to load GRNs or purchase orders from the API.");
       }
     };
 

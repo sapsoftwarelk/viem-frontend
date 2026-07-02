@@ -280,8 +280,13 @@ export default function AdminDashboard() {
                     <tr key={transfer.id}>
                       <td className="font-bold text-gray-900">{transfer.id}</td>
                       <td className="text-gray-700 text-[12px]">{transfer.from} → {transfer.to}</td>
-                      <td className="hidden md:table-cell text-gray-600">{transfer.items}</td>
-                      <td><Badge variant={statusBadgeVariant(transfer.status)}>{transfer.status.replace(/_/g, " ")}</Badge></td>
+<td className="hidden md:table-cell text-gray-600">
+  {Array.isArray(transfer.items)
+    ? transfer.items
+        .map((item: any) => `${item.itemName} (${item.quantity})`)
+        .join(", ")
+    : transfer.items}
+</td>                      <td><Badge variant={statusBadgeVariant(transfer.status)}>{transfer.status.replace(/_/g, " ")}</Badge></td>
                       <td className="hidden lg:table-cell text-gray-500">{transfer.date}</td>
                     </tr>
                   ))}

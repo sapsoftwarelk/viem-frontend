@@ -16,10 +16,11 @@ export class ApiError extends Error {
 let resolvedApiBaseUrl: string | null = null;
 
 function getApiBaseUrls() {
-  if (resolvedApiBaseUrl) {
-    return [resolvedApiBaseUrl];
-  }
-  return [DEFAULT_API_BASE_URL, ...FALLBACK_API_BASE_URLS].filter(Boolean) as string[];
+  const configuredUrls = [resolvedApiBaseUrl, DEFAULT_API_BASE_URL, ...FALLBACK_API_BASE_URLS]
+    .filter(Boolean)
+    .filter((value, index, array) => array.indexOf(value) === index) as string[];
+
+  return configuredUrls;
 }
 
 export function getStoredAuthToken() {
@@ -64,10 +65,11 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
       }
 
       const body = await res.json().catch(() => null);
-      resolvedApiBaseUrl = baseUrl;
       if (!res.ok) {
         throw new ApiError(body?.message || body?.error || res.statusText || "API request failed", res.status);
       }
+
+      resolvedApiBaseUrl = baseUrl;
       return body;
     } catch (error) {
       if (error instanceof ApiError) {
