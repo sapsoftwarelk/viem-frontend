@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { apiFetch } from "../../../lib/api";
 import {
   Plus, Search, Eye, Pencil, Trash2, X, AlertCircle,
   Package, ChevronDown, Hash, Calendar, Download, Filter,
@@ -203,6 +202,44 @@ const SEED_GRNS = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
+// API
+// ─────────────────────────────────────────────────────────────────────────────
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001";
+
+// Centralised fetch wrapper: attaches the JWT and throws on non-2xx so
+// callers can just `await` and catch.
+async function apiFetch(path: string, options: RequestInit = {}) {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`${options.method || "GET"} ${path} failed (${res.status}): ${body}`);
+  }
+  // 204 No Content (typical for DELETE) has no body to parse
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+const grnApi = {
+  list: () => apiFetch("/goods-received-notes"),
+  create: (dto: any) => apiFetch("/goods-received-notes", { method: "POST", body: JSON.stringify(dto) }),
+  update: (id: string, dto: any) => apiFetch(`/goods-received-notes/${id}`, { method: "PATCH", body: JSON.stringify(dto) }),
+  remove: (id: string) => apiFetch(`/goods-received-notes/${id}`, { method: "DELETE" }),
+};
+
+const poApi = {
+  list: () => apiFetch("/purchase-orders"),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -213,126 +250,6 @@ function formatDate(d: string) {
 }
 function fmtCurrency(n: number) {
   return n ? `Rs. ${n.toLocaleString("en-LK")}` : "—";
-}
-
-function normalizeGRNStatus(status?: string) {
-  const value = String(status || "").toLowerCase();
-  if (value.includes("review")) return "Pending Review";
-  if (value.includes("partial")) return "Partially Received";
-  if (value.includes("receive")) return "Received";
-  if (value.includes("return")) return "Returned";
-  if (value.includes("cancel")) return "Cancelled";
-  if (value.includes("draft") || value.includes("create")) return "Draft";
-  return "Draft";
-}
-
-function normalizePOStatus(status?: string) {
-  const value = String(status || "").toLowerCase();
-  if (value.includes("approve")) return "Pending Approval";
-  if (value.includes("approved")) return "Approved";
-  if (value.includes("ordered")) return "Ordered";
-  if (value.includes("partial")) return "Partially Received";
-  if (value.includes("receive")) return "Received";
-  if (value.includes("cancel")) return "Cancelled";
-  if (value.includes("draft")) return "Draft";
-  return "Draft";
-}
-
-function mapPurchaseOrderToUI(po: any) {
-  const poId = po?.docId || po?.id || po?.poNumber || "";
-  const expectedDate = po?.expectedDate ? new Date(po.expectedDate) : null;
-  return {
-    id: poId,
-    poNumber: poId,
-    status: normalizePOStatus(po?.document?.status || po?.status),
-    supplier: po?.supplier || "",
-    site: po?.site || "",
-    requestedBy: po?.document?.creator?.employee?.fullName || po?.requestedBy || "",
-    approvedBy: po?.document?.isAdminApproved ? "System" : po?.approvedBy || "",
-    createdDate: po?.document?.createdAt ? new Date(po.document.createdAt).toISOString().slice(0, 10) : po?.createdDate || todayStr(),
-    requiredDate: expectedDate ? expectedDate.toISOString().slice(0, 10) : po?.requiredDate || "",
-    deliveredDate: po?.deliveredDate || "",
-    notes: po?.notes || "",
-    lines: Array.isArray(po?.items)
-      ? po.items.map((line: any, index: number) => ({
-          id: line?.id || `${poId}-line-${index + 1}`,
-          itemId: line?.itemId || "",
-          itemName: line?.itemName || line?.description || "",
-          type: line?.type || "Consumable",
-          categoryCode: line?.categoryCode || "",
-          unit: line?.unit || "",
-          qtyOrdered: Number(line?.quantity || 0),
-          qtyReceived: Number(line?.receivedQty || 0),
-          unitPrice: Number(line?.unitPrice || 0),
-          isRegistered: Boolean(line?.itemId),
-        }))
-      : Array.isArray(po?.lines)
-        ? po.lines
-        : [],
-  };
-}
-
-function mapGRNToUI(grn: any) {
-  const grnId = grn?.docId || grn?.id || grn?.grnNumber || "";
-  const tools = (Array.isArray(grn?.tools) ? grn.tools : []).map((item: any) => ({
-    id: item?.id || `${grnId}-tool-${Math.random().toString(36).slice(2, 8)}`,
-    poLineId: "",
-    itemId: item?.id || "",
-    itemName: item?.itemName || item?.model || item?.id || "",
-    type: "Tool",
-    categoryCode: item?.subCategoryId ? String(item.subCategoryId) : "",
-    unit: item?.unit || "",
-    qtyOrdered: Number(item?.quantity || 1),
-    qtyReceived: Number(item?.quantity || 1),
-    unitPrice: Number(item?.unitPrice || 0),
-    isRegistered: true,
-    condition: item?.condition || "Good",
-  }));
-  const consumables = (Array.isArray(grn?.consumables) ? grn.consumables : []).map((item: any) => ({
-    id: item?.id || `${grnId}-consumable-${Math.random().toString(36).slice(2, 8)}`,
-    poLineId: "",
-    itemId: item?.id || "",
-    itemName: item?.itemName || item?.id || "",
-    type: "Consumable",
-    categoryCode: item?.subCategoryId ? String(item.subCategoryId) : "",
-    unit: item?.unit || "",
-    qtyOrdered: Number(item?.quantity || 1),
-    qtyReceived: Number(item?.quantity || 1),
-    unitPrice: Number(item?.unitPrice || 0),
-    isRegistered: true,
-    condition: item?.condition || "Good",
-  }));
-  const reusables = (Array.isArray(grn?.reusables) ? grn.reusables : []).map((item: any) => ({
-    id: item?.id || `${grnId}-reusable-${Math.random().toString(36).slice(2, 8)}`,
-    poLineId: "",
-    itemId: item?.id || "",
-    itemName: item?.itemName || item?.bundleId || item?.id || "",
-    type: "Reusable",
-    categoryCode: item?.subCategoryId ? String(item.subCategoryId) : "",
-    unit: item?.unit || "",
-    qtyOrdered: Number(item?.pieceNum || 1),
-    qtyReceived: Number(item?.pieceNum || 1),
-    unitPrice: Number(item?.unitPrice || 0),
-    isRegistered: true,
-    condition: item?.condition || "Good",
-  }));
-
-  return {
-    id: grnId,
-    grnNumber: grnId,
-    status: normalizeGRNStatus(grn?.document?.status),
-    poId: grn?.poId || "",
-    poNumber: grn?.po?.docId || grn?.poNumber || "",
-    linkedPO: Boolean(grn?.poId),
-    supplier: grn?.supplier || "",
-    site: grn?.site || "",
-    receivedBy: grn?.receivedBy || "",
-    inspectedBy: grn?.inspectedBy || "",
-    receivedDate: grn?.receivedDate ? new Date(grn.receivedDate).toISOString().slice(0, 10) : "",
-    deliveryNote: grn?.deliveryNote || "",
-    notes: grn?.notes || "",
-    lines: [...tools, ...consumables, ...reusables],
-  };
 }
 
 let grnCounter = 3;
@@ -1258,10 +1175,12 @@ function ConfirmDelete({ open, onClose, onConfirm, name }: any) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function GoodsReceivedNotePage() {
-  const [grns, setGrns]             = useState(SEED_GRNS);
-  const [pos, setPos]               = useState(SEED_POS_FOR_GRN);
-  const [persons]                   = useState(SEED_PERSONS);
-  const [sites]                     = useState(SEED_SITES);
+  const [grns, setGrns]             = useState<any[]>([]);
+  const [pos, setPos]               = useState<any[]>([]);
+  const [persons]                   = useState(SEED_PERSONS); // TODO: wire to a real /persons or /employees endpoint
+  const [sites]                     = useState(SEED_SITES);   // TODO: wire to a real /sites endpoint
+  const [loading, setLoading]       = useState(true);
+  const [loadError, setLoadError]   = useState<string | null>(null);
   const [search, setSearch]         = useState("");
   const [filterStatus, setFilter]   = useState("all");
   const [modal, setModal]           = useState<string | null>(null);
@@ -1269,38 +1188,29 @@ export default function GoodsReceivedNotePage() {
   const [drawer, setDrawer]         = useState<any>(null);
   const [reportGRN, setReportGRN]   = useState<any>(null);
   const [createLinkedPO, setCreateLinkedPO] = useState<any>(null);
-  const [apiError, setApiError] = useState("");
+
+  const loadData = async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const [grnData, poData] = await Promise.all([grnApi.list(), poApi.list()]);
+      setGrns(grnData);
+      setPos(poData);
+    } catch (err: any) {
+      setLoadError(err.message || "Failed to load data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
 
   const handleCreateWithPO = (po: any) => {
     setCreateLinkedPO(po);
     setModal("create");
   };
-
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const [grnResult, poResult] = await Promise.all([
-          apiFetch("/goods-received-notes"),
-          apiFetch("/purchase-orders"),
-        ]);
-
-        if (Array.isArray(grnResult)) {
-          setGrns(grnResult.map(mapGRNToUI));
-        }
-
-        if (Array.isArray(poResult)) {
-          setPos(poResult.map(mapPurchaseOrderToUI));
-        }
-
-        setApiError("");
-      } catch (error: any) {
-        console.warn("Falling back to seeded GRNs/POs", error);
-        setApiError(error?.message || "Unable to load GRNs or purchase orders from the API.");
-      }
-    };
-
-    loadData();
-  }, []);
 
   const filtered = grns.filter((grn) => {
     const q = search.toLowerCase();
@@ -1310,54 +1220,34 @@ export default function GoodsReceivedNotePage() {
   });
 
   const create = async (data: any) => {
-    const payload = {
-      poId: data.linkedPO ? data.poId : undefined,
-      items: (data.lines || []).map((line: any) => ({
-        type: line.type === "Tool" ? "tool" : line.type === "Reusable" ? "reusable" : "consumable",
-        subCategoryId: 1,
-        itemName: line.itemName || "Item",
-        description: line.itemName || "",
-        supplier: data.supplier || "",
-        quantity: Number(line.qtyReceived || line.qtyOrdered || 1),
-        unit: line.unit || undefined,
-        locationId: data.site || undefined,
-      })),
-    };
-
     try {
-      const created = await apiFetch("/goods-received-notes", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-      const mapped = mapGRNToUI(created?.grn ? {
-        ...created.grn,
-        document: created.document,
-        po: created.grn?.po,
-        tools: (created.createdItems || []).filter((item: any) => item.type === "tool").map((item: any) => item.item),
-        consumables: (created.createdItems || []).filter((item: any) => item.type === "consumable").map((item: any) => item.item),
-        reusables: (created.createdItems || []).filter((item: any) => item.type === "reusable").map((item: any) => item.item),
-      } : created);
-      setGrns((p) => [mapped, ...p]);
-      setApiError("");
+      const created = await grnApi.create(data);
+      setGrns((p) => [...p, created]);
       setModal(null);
       setCreateLinkedPO(null);
-    } catch (error: any) {
-      console.warn("API create failed, saving locally", error);
-      setGrns((p) => [...p, { id: "grn" + uid(), ...data, createdDate: todayStr(), grnNumber: data.grnNumber || nextGRNNumber() }]);
-      setApiError(error?.message || "Saved locally because the API is unavailable.");
-      setModal(null);
-      setCreateLinkedPO(null);
+    } catch (err: any) {
+      setLoadError(err.message || "Failed to create GRN");
     }
   };
-  const update = (data: any) => {
-    setGrns((p) => p.map((i) => i.id === target.id ? { ...i, ...data } : i));
-    setModal(null);
-    setDrawer(null);
+  const update = async (data: any) => {
+    try {
+      const updated = await grnApi.update(target.id, data);
+      setGrns((p) => p.map((i) => (i.id === target.id ? updated : i)));
+      setModal(null);
+      setDrawer(null);
+    } catch (err: any) {
+      setLoadError(err.message || "Failed to update GRN");
+    }
   };
-  const remove = () => {
-    setGrns((p) => p.filter((i) => i.id !== target.id));
-    setModal(null);
-    setDrawer(null);
+  const remove = async () => {
+    try {
+      await grnApi.remove(target.id);
+      setGrns((p) => p.filter((i) => i.id !== target.id));
+      setModal(null);
+      setDrawer(null);
+    } catch (err: any) {
+      setLoadError(err.message || "Failed to delete GRN");
+    }
   };
 
   const totalGRNs       = grns.length;
@@ -1379,16 +1269,24 @@ export default function GoodsReceivedNotePage() {
 
   const receivablePOs = pos.filter((po) => !["Cancelled", "Received"].includes(po.status));
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#f7f8fb] p-5 font-sans flex items-center justify-center">
+        <p className="text-slate-400 text-[13px]">Loading goods received notes…</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#f7f8fb] p-5 font-sans">
+      {loadError && (
+        <div className="mb-4 flex items-center justify-between gap-3 bg-rose-50 border border-rose-200 text-rose-700 text-[12px] rounded-xl px-4 py-3">
+          <span className="flex items-center gap-2"><AlertCircle size={14} /> {loadError}</span>
+          <button onClick={loadData} className="font-semibold underline hover:no-underline">Retry</button>
+        </div>
+      )}
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        {apiError && (
-          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-700">
-            {apiError}
-          </div>
-        )}
-
         <div className="mb-6 flex items-start justify-between flex-wrap gap-3">
           <div>
             <div className="flex items-center gap-2 mb-1">

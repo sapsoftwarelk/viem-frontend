@@ -243,13 +243,7 @@ const VEHICLES: Vehicle[] = [
   { id: "veh3", plate: "PUP-001", type: "Pickup", driver: "Nuwan Jaya", status: "Available" },
 ];
 
-// Inventory with site-specific stock
-const INVENTORY_ITEMS: InventoryItem[] = [
-  { id: "item1", name: "OPC Cement 50kg", type: "Consumable", unit: "Bags", quantity: 500, siteStock: { site1: 200, site2: 100, site3: 50 }, expiryDate: "2026-06-10" },
-  { id: "item2", name: "T12 Rebar", type: "Consumable", unit: "kg", quantity: 5000, siteStock: { site1: 1200, site2: 800, site3: 400 }, expiryDate: "2026-08-15" },
-  { id: "item3", name: "Scaffolding Frame", type: "Reusable", unit: "frames", quantity: 150, siteStock: { site1: 45, site2: 30, site3: 20 } },
-  { id: "item4", name: "Angle Grinder", type: "Tool", unit: "pcs", quantity: 10, siteStock: { site1: 4, site2: 2, site3: 1 } },
-];
+
 
 // Seed tasks with transfer notes instead of material requests
 const SEED_TASKS: SiteTask[] = [
@@ -1006,10 +1000,24 @@ export default function SiteTaskManagerPage() {
   const [sites, setSites] = useState(SITES);
   const [employees] = useState(EMPLOYEES);
   const [vehicles] = useState(VEHICLES);
-  const [inventoryItems] = useState(INVENTORY_ITEMS);
   const [tasksBySite, setTasksBySite] = useState<Record<string, SiteTask[]>>(SITE_TASKS_MAP);
   const [search, setSearch] = useState("");
   const [apiError, setApiError] = useState("");
+  // Inventory with site-specific stock
+  const [inventoryItems, setInventoryItems] = useState([]);
+
+useEffect(() => {
+  const loadInventory = async () => {
+    try {
+      const data = await apiFetch("/inventory");
+      setInventoryItems(data);
+    } catch (err) {
+      console.error("Failed to load inventory", err);
+    }
+  };
+
+  loadInventory();
+}, []);
 
   useEffect(() => {
     const loadSites = async () => {
