@@ -1409,8 +1409,16 @@ export default function PurchaseOrderPage() {
     setDrawer(null);
   };
 
-  const remove = () => {
-    setPos((p) => p.filter((i) => i.id !== target.id));
+  const remove = async () => {
+    const removedId = target.id;
+    try {
+      await apiFetch(`/purchase-orders/${removedId}`, { method: "DELETE" });
+      setPos((p) => p.filter((i) => i.id !== removedId));
+      setApiError("");
+    } catch (error: any) {
+      console.warn("API delete failed", error);
+      setApiError(error?.message || "Could not delete this Purchase Order.");
+    }
     setModal(null);
     setDrawer(null);
   };

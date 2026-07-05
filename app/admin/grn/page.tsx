@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { apiFetch } from "../../../lib/api";
 import {
   Plus, Search, Eye, Pencil, Trash2, X, AlertCircle,
   Package, ChevronDown, Hash, Calendar, Download, Filter,
@@ -124,6 +125,23 @@ const SEED_SITES = [
   },
 ];
 
+// Real /site-locations records use `siteName`; this file's components expect `name`.
+function mapSiteLocationsFromApi(list: any[]) {
+  return (Array.isArray(list) ? list : []).map((s: any) => ({
+    id: s.id,
+    name: s.siteName,
+    region: s.region,
+    seq: s.seq ?? 0,
+    status: s.status,
+    client: s.client,
+    contactNumber: s.contactNumber,
+    address: s.address,
+    startDate: s.startDate,
+    remarks: s.remarks,
+    subLevels: s.subLevels ?? [],
+  }));
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SEED DATA — POs & GRNs
 // ─────────────────────────────────────────────────────────────────────────────
@@ -205,28 +223,9 @@ const SEED_GRNS = [
 // API
 // ─────────────────────────────────────────────────────────────────────────────
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001";
-
-// Centralised fetch wrapper: attaches the JWT and throws on non-2xx so
-// callers can just `await` and catch.
-async function apiFetch(path: string, options: RequestInit = {}) {
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.headers || {}),
-    },
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`${options.method || "GET"} ${path} failed (${res.status}): ${body}`);
-  }
-  // 204 No Content (typical for DELETE) has no body to parse
-  if (res.status === 204) return null;
-  return res.json();
-}
+// Use the same shared apiFetch as the Purchase Orders page — this already
+// points at the correct base URL and /api prefix, so we don't duplicate
+// (and risk mismatching) that config here.
 
 const grnApi = {
   list: () => apiFetch("/goods-received-notes"),
@@ -238,6 +237,49 @@ const grnApi = {
 const poApi = {
   list: () => apiFetch("/purchase-orders"),
 };
+
+// The /purchase-orders API returns items with { quantity, receivedQty } —
+// this page's PO picker/GRN form expects { lines } with { qtyOrdered, qtyReceived },
+// same shape the Purchase Orders page itself uses. Map it the same way here.
+function normalizePOStatusForGRN(status?: string) {
+  const value = String(status || "").toLowerCase();
+  if (value.includes("approved")) return "Approved";
+  if (value.includes("rejected") || value.includes("cancel")) return "Cancelled";
+  if (value.includes("pending")) return "Pending Approval";
+  if (value.includes("ordered")) return "Ordered";
+  if (value.includes("partial")) return "Partially Received";
+  if (value.includes("receive")) return "Received";
+  if (value.includes("draft")) return "Draft";
+  return "Draft";
+}
+
+function mapPurchaseOrderForGRN(po: any) {
+  const poId = po?.docId || po?.id || po?.poNumber || "";
+  return {
+    id: poId,
+    poNumber: poId,
+    status: normalizePOStatusForGRN(po?.status),
+    supplier: po?.supplier || "",
+    site: po?.site || "",
+    siteLocationId: po?.siteLocationId || "",
+    lines: Array.isArray(po?.items)
+      ? po.items.map((line: any, index: number) => ({
+          id: line?.id || `${poId}-line-${index + 1}`,
+          itemId: line?.itemId || "",
+          itemName: line?.itemName || line?.description || "",
+          type: line?.type || "Consumable",
+          categoryCode: line?.categoryCode || "",
+          unit: line?.unit || "",
+          qtyOrdered: Number(line?.quantity || 0),
+          qtyReceived: Number(line?.receivedQty || 0),
+          unitPrice: Number(line?.unitPrice || 0),
+          isRegistered: Boolean(line?.itemId),
+        }))
+      : Array.isArray(po?.lines)
+        ? po.lines
+        : [],
+  };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -534,7 +576,7 @@ function GRNForm({ initial, onSubmit, onCancel, pos, linkedPO: initialLinkedPO, 
   const defaultGRN = {
     grnNumber: nextGRNNumber(), status: "Draft",
     poId: "", poNumber: "", linkedPO: false,
-    supplier: "", site: "",
+    supplier: "", site: "", siteLocationId: "",
     receivedBy: "", receivedById: "",
     inspectedBy: "", inspectedById: "",
     receivedDate: todayStr(), deliveryNote: "", notes: "",
@@ -551,6 +593,7 @@ function GRNForm({ initial, onSubmit, onCancel, pos, linkedPO: initialLinkedPO, 
         linkedPO: true,
         supplier: initialLinkedPO.supplier || "",
         site: initialLinkedPO.site || "",
+        siteLocationId: initialLinkedPO.siteLocationId || "",
         lines: initialLinkedPO.lines
           .filter((l: any) => l.qtyReceived < l.qtyOrdered)
           .map((l: any) => ({
@@ -585,6 +628,7 @@ function GRNForm({ initial, onSubmit, onCancel, pos, linkedPO: initialLinkedPO, 
       linkedPO: true,
       supplier: po.supplier || f.supplier,
       site: po.site || f.site,
+      siteLocationId: po.siteLocationId || f.siteLocationId,
       lines: remainingLines.map((l: any) => ({
         id: uid(),
         poLineId: l.id,
@@ -705,13 +749,17 @@ function GRNForm({ initial, onSubmit, onCancel, pos, linkedPO: initialLinkedPO, 
           </label>
           <div className="relative">
             <select 
-              value={form.site} 
-              onChange={(e) => set("site", e.target.value)} 
+              value={form.siteLocationId} 
+              onChange={(e) => {
+                const selectedId = e.target.value;
+                const selected = sites.find((s: any) => s.id === selectedId);
+                setForm((f: any) => ({ ...f, siteLocationId: selectedId, site: selected?.name || "" }));
+              }} 
               className={selectCls}
             >
               <option value="">— Select Delivery Site —</option>
               {activeSites.map((site: any) => (
-                <option key={site.id} value={site.name}>
+                <option key={site.id} value={site.id}>
                   {site.name} ({site.id}) — {site.client}
                 </option>
               ))}
@@ -1178,7 +1226,7 @@ export default function GoodsReceivedNotePage() {
   const [grns, setGrns]             = useState<any[]>([]);
   const [pos, setPos]               = useState<any[]>([]);
   const [persons]                   = useState(SEED_PERSONS); // TODO: wire to a real /persons or /employees endpoint
-  const [sites]                     = useState(SEED_SITES);   // TODO: wire to a real /sites endpoint
+  const [sites, setSites]           = useState(SEED_SITES);   // seeded fallback; replaced by real /site-locations on load
   const [loading, setLoading]       = useState(true);
   const [loadError, setLoadError]   = useState<string | null>(null);
   const [search, setSearch]         = useState("");
@@ -1193,9 +1241,16 @@ export default function GoodsReceivedNotePage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [grnData, poData] = await Promise.all([grnApi.list(), poApi.list()]);
+      const [grnData, poData, siteData] = await Promise.all([
+        grnApi.list(),
+        poApi.list(),
+        apiFetch("/site-locations").catch(() => null),
+      ]);
       setGrns(grnData);
-      setPos(poData);
+      setPos(Array.isArray(poData) ? poData.map(mapPurchaseOrderForGRN) : poData);
+      if (Array.isArray(siteData)) {
+        setSites(mapSiteLocationsFromApi(siteData));
+      }
     } catch (err: any) {
       setLoadError(err.message || "Failed to load data");
     } finally {
