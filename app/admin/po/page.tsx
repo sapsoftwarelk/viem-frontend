@@ -199,6 +199,30 @@ function mapPurchaseOrderToUI(po: any) {
   };
 }
 
+// Maps the ItemsService#findAll() response ({ type: 'tool'|'consumable'|'reusable', item }[])
+// into the flat shape ItemPickerModal / registeredItems expect.
+function mapRegisteredItemsFromApi(list: any[]) {
+  const typeLabel: Record<string, string> = {
+    tool: "Tool",
+    consumable: "Consumable",
+    reusable: "Reusable",
+  };
+
+  return (Array.isArray(list) ? list : []).map((entry: any) => {
+    const item = entry?.item || {};
+    const type = typeLabel[entry?.type] || "Consumable";
+    return {
+      itemId: item.id || "",
+      name: item.itemName || item.model || item.id || "Unnamed item",
+      type,
+      categoryCode: item.subCategory?.code || "",
+      categoryLabel: item.subCategory?.name || "",
+      unit: item.unit || "",
+      status: item.status || "Active",
+    };
+  });
+}
+
 let poCounter = 3;
 function nextPONumber() {
   poCounter++;
@@ -1317,8 +1341,20 @@ export default function PurchaseOrderPage() {
       }
     };
 
+    const loadItems = async () => {
+      try {
+        const result = await apiFetch("/items");
+        if (Array.isArray(result)) {
+          setRegisteredItems(mapRegisteredItemsFromApi(result));
+        }
+      } catch (error) {
+        console.warn("Falling back to seeded items", error);
+      }
+    };
+
     loadData();
     loadSites();
+    loadItems();
   }, []);
 
   const handleNewItemRegistered = (item: any) => {
