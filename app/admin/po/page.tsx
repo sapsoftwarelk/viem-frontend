@@ -151,29 +151,32 @@ function fmtCurrency(n: number) {
 
 function normalizePOStatus(status?: string) {
   const value = String(status || "").toLowerCase();
-  if (value.includes("approve")) return "Pending Approval";
-  if (value.includes("approve")) return "Pending Approval";
   if (value.includes("approved")) return "Approved";
+  if (value.includes("rejected") || value.includes("cancel")) return "Cancelled";
+  if (value.includes("pending") || value.includes("approve")) return "Pending Approval";
   if (value.includes("ordered")) return "Ordered";
   if (value.includes("partial")) return "Partially Received";
   if (value.includes("receive")) return "Received";
-  if (value.includes("cancel")) return "Cancelled";
   if (value.includes("draft")) return "Draft";
   return "Draft";
 }
 
+// Matches the flat shape returned by PurchaseOrdersService#toResponse:
+// { id, docId, status, isAdminApproved, createdAt, supplier, totalCost,
+//   expectedDate, requestedBy, creator, items: [...] }
 function mapPurchaseOrderToUI(po: any) {
   const poId = po?.docId || po?.id || po?.poNumber || "";
   const expectedDate = po?.expectedDate ? new Date(po.expectedDate) : null;
   return {
     id: poId,
     poNumber: poId,
-    status: normalizePOStatus(po?.document?.status || po?.status),
+    status: normalizePOStatus(po?.status),
     supplier: po?.supplier || "",
     site: po?.site || "",
-    requestedBy: po?.document?.creator?.employee?.fullName || po?.requestedBy || "",
-    approvedBy: po?.document?.isAdminApproved ? "System" : po?.approvedBy || "",
-    createdDate: po?.document?.createdAt ? new Date(po.document.createdAt).toISOString().slice(0, 10) : po?.createdDate || todayStr(),
+    siteLocationId: po?.siteLocationId || "",
+    requestedBy: po?.requestedBy || "",
+    approvedBy: po?.isAdminApproved ? "System" : po?.approvedBy || "",
+    createdDate: po?.createdAt ? new Date(po.createdAt).toISOString().slice(0, 10) : po?.createdDate || todayStr(),
     requiredDate: expectedDate ? expectedDate.toISOString().slice(0, 10) : po?.requiredDate || "",
     deliveredDate: po?.deliveredDate || "",
     notes: po?.notes || "",
@@ -693,12 +696,12 @@ function POLineRow({ line, index, onUpdate, onRemove, onOpenPicker, onGoRegister
 // PO FORM
 // ─────────────────────────────────────────────────────────────────────────────
 
-function POForm({ initial, onSubmit, onCancel, onGoRegister, registeredItems, onNewItemRegistered }: {
+function POForm({ initial, onSubmit, onCancel, onGoRegister, registeredItems, siteLocations, onNewItemRegistered }: {
   initial?: any; onSubmit: (data: any) => void; onCancel: () => void;
-  onGoRegister: () => void; registeredItems: any[]; onNewItemRegistered: (item: any) => void;
+  onGoRegister: () => void; registeredItems: any[]; siteLocations: any[]; onNewItemRegistered: (item: any) => void;
 }) {
   const defaultPO = {
-    poNumber: nextPONumber(), status: "Draft", supplier: "", site: "",
+    poNumber: nextPONumber(), status: "Draft", supplier: "", site: "", siteLocationId: "",
     requestedBy: "", approvedBy: "", createdDate: todayStr(),
     requiredDate: "", deliveredDate: "", notes: "", lines: [],
   };
@@ -767,7 +770,20 @@ function POForm({ initial, onSubmit, onCancel, onGoRegister, registeredItems, on
         </div>
         <div>
           <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5 tracking-wider">Delivery Site</label>
-          <input value={form.site} onChange={(e) => set("site", e.target.value)} placeholder="Site / Warehouse" className={inputCls} />
+          <select
+            value={form.siteLocationId}
+            onChange={(e) => {
+              const selectedId = e.target.value;
+              const selected = siteLocations.find((s: any) => s.id === selectedId);
+              setForm((f: any) => ({ ...f, siteLocationId: selectedId, site: selected?.siteName || "" }));
+            }}
+            className={inputCls}
+          >
+            <option value="">Select a site…</option>
+            {siteLocations.map((s: any) => (
+              <option key={s.id} value={s.id}>{s.siteName}</option>
+            ))}
+          </select>
         </div>
         <div>
           <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5 tracking-wider">Requested By</label>
@@ -1267,6 +1283,7 @@ function ConfirmDelete({ open, onClose, onConfirm, name }: any) {
 export default function PurchaseOrderPage() {
   const [pos, setPos]               = useState(SEED_POS);
   const [registeredItems, setRegisteredItems] = useState(SEED_REGISTERED_ITEMS);
+  const [siteLocations, setSiteLocations] = useState<any[]>([]);
   const [search, setSearch]         = useState("");
   const [filterStatus, setFilter]   = useState("all");
   const [modal, setModal]           = useState<string | null>(null);
@@ -1289,7 +1306,19 @@ export default function PurchaseOrderPage() {
       }
     };
 
+    const loadSites = async () => {
+      try {
+        const result = await apiFetch("/site-locations");
+        if (Array.isArray(result)) {
+          setSiteLocations(result);
+        }
+      } catch (error) {
+        console.warn("Unable to load site locations", error);
+      }
+    };
+
     loadData();
+    loadSites();
   }, []);
 
   const handleNewItemRegistered = (item: any) => {
@@ -1306,10 +1335,15 @@ export default function PurchaseOrderPage() {
   const create = async (data: any) => {
     const payload = {
       supplier: data.supplier || "",
+      siteLocationId: data.siteLocationId || null,
       totalCost: (data.lines || []).reduce((sum: number, line: any) => sum + (line.qtyOrdered || 0) * (line.unitPrice || 0), 0),
       expectedDate: data.requiredDate ? new Date(data.requiredDate) : new Date(),
       items: (data.lines || []).map((line: any) => ({
+        itemId: line.itemId || null,
         description: line.itemName || line.name || "",
+        type: line.type || null,
+        categoryCode: line.categoryCode || null,
+        unit: line.unit || null,
         quantity: Number(line.qtyOrdered || 1),
         unitPrice: Number(line.unitPrice || 0),
         subCategoryId: 1,
@@ -1321,7 +1355,7 @@ export default function PurchaseOrderPage() {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      const mapped = mapPurchaseOrderToUI(created?.po ? { ...created.po, document: created.document, items: created.items } : created);
+      const mapped = mapPurchaseOrderToUI(created);
       setPos((p) => [mapped, ...p]);
       setApiError("");
       setModal(null);
@@ -1509,12 +1543,14 @@ export default function PurchaseOrderPage() {
         <POForm onSubmit={create} onCancel={() => setModal(null)}
           onGoRegister={() => {}}
           registeredItems={registeredItems}
+          siteLocations={siteLocations}
           onNewItemRegistered={handleNewItemRegistered} />
       </Modal>
       <Modal open={modal === "edit"} onClose={() => setModal(null)} title="Edit Purchase Order" width="max-w-3xl">
         {target && <POForm initial={target} onSubmit={update} onCancel={() => setModal(null)}
           onGoRegister={() => {}}
           registeredItems={registeredItems}
+          siteLocations={siteLocations}
           onNewItemRegistered={handleNewItemRegistered} />}
       </Modal>
 
