@@ -720,9 +720,9 @@ function POLineRow({ line, index, onUpdate, onRemove, onOpenPicker, onGoRegister
 // PO FORM
 // ─────────────────────────────────────────────────────────────────────────────
 
-function POForm({ initial, onSubmit, onCancel, onGoRegister, registeredItems, siteLocations, onNewItemRegistered }: {
+function POForm({ initial, onSubmit, onCancel, onGoRegister, registeredItems, siteLocations, suppliers, onNewItemRegistered }: {
   initial?: any; onSubmit: (data: any) => void; onCancel: () => void;
-  onGoRegister: () => void; registeredItems: any[]; siteLocations: any[]; onNewItemRegistered: (item: any) => void;
+  onGoRegister: () => void; registeredItems: any[]; siteLocations: any[]; suppliers: any[]; onNewItemRegistered: (item: any) => void;
 }) {
   const defaultPO = {
     poNumber: nextPONumber(), status: "Draft", supplier: "", site: "", siteLocationId: "",
@@ -790,7 +790,15 @@ function POForm({ initial, onSubmit, onCancel, onGoRegister, registeredItems, si
         </div>
         <div className="col-span-2">
           <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5 tracking-wider">Supplier / Vendor</label>
-          <input value={form.supplier} onChange={(e) => set("supplier", e.target.value)} placeholder="Supplier or vendor name" className={inputCls} />
+          <select value={form.supplier} onChange={(e) => set("supplier", e.target.value)} className={inputCls}>
+            <option value="">Select a supplier…</option>
+            {form.supplier && !suppliers.some((s: any) => s.name === form.supplier) && (
+              <option value={form.supplier}>{form.supplier} (not in supplier list)</option>
+            )}
+            {suppliers.map((s: any) => (
+              <option key={s.id} value={s.name}>{s.name}{s.code ? ` (${s.code})` : ""}</option>
+            ))}
+          </select>
         </div>
         <div>
           <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5 tracking-wider">Delivery Site</label>
@@ -1308,6 +1316,7 @@ export default function PurchaseOrderPage() {
   const [pos, setPos]               = useState(SEED_POS);
   const [registeredItems, setRegisteredItems] = useState(SEED_REGISTERED_ITEMS);
   const [siteLocations, setSiteLocations] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
   const [search, setSearch]         = useState("");
   const [filterStatus, setFilter]   = useState("all");
   const [modal, setModal]           = useState<string | null>(null);
@@ -1341,6 +1350,17 @@ export default function PurchaseOrderPage() {
       }
     };
 
+    const loadSuppliers = async () => {
+      try {
+        const result = await apiFetch("/suppliers");
+        if (Array.isArray(result)) {
+          setSuppliers(result);
+        }
+      } catch (error) {
+        console.warn("Unable to load suppliers", error);
+      }
+    };
+
     const loadItems = async () => {
       try {
         const result = await apiFetch("/items");
@@ -1355,6 +1375,7 @@ export default function PurchaseOrderPage() {
     loadData();
     loadSites();
     loadItems();
+    loadSuppliers();
   }, []);
 
   const handleNewItemRegistered = (item: any) => {
@@ -1588,6 +1609,7 @@ export default function PurchaseOrderPage() {
           onGoRegister={() => {}}
           registeredItems={registeredItems}
           siteLocations={siteLocations}
+          suppliers={suppliers}
           onNewItemRegistered={handleNewItemRegistered} />
       </Modal>
       <Modal open={modal === "edit"} onClose={() => setModal(null)} title="Edit Purchase Order" width="max-w-3xl">
@@ -1595,6 +1617,7 @@ export default function PurchaseOrderPage() {
           onGoRegister={() => {}}
           registeredItems={registeredItems}
           siteLocations={siteLocations}
+          suppliers={suppliers}
           onNewItemRegistered={handleNewItemRegistered} />}
       </Modal>
 

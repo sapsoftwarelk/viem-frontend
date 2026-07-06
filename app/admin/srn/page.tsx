@@ -219,6 +219,22 @@ function generateSupplierCode(suppliers: any[]) {
   return `SUP-${String(nextNum).padStart(3, "0")}`;
 }
 
+// Maps a real /suppliers record onto the shape this file already uses.
+function mapSupplierFromApi(s: any) {
+  return {
+    id: s?.id || "",
+    code: s?.code || s?.id || "",
+    name: s?.name || "",
+    contactPerson: s?.contactPerson || "",
+    email: s?.email || "",
+    phone: s?.phone || "",
+    address: s?.address || "",
+    taxId: s?.taxId || "",
+    status: s?.status || "Active",
+    createdDate: s?.createdAt ? new Date(s.createdAt).toISOString().slice(0, 10) : "",
+  };
+}
+
 function calcSRNTotals(lines: any[]) {
   const totalValue = lines.reduce((s, l) => s + (l.total || (l.quantity * l.unitPrice)), 0);
   const totalItems = lines.reduce((s, l) => s + l.quantity, 0);
@@ -294,7 +310,7 @@ function SupplierModal({ open, onClose, onSubmit, initial, isEditing }: any) {
           </div>
           <div>
             <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1">Supplier Code</label>
-            <input value={form.code} onChange={(e) => handleChange("code", e.target.value)} className={inputCls} placeholder="Auto-generated" />
+            <input value={form.code} disabled className={`${inputCls} bg-slate-50 text-slate-400`} placeholder="Auto-generated" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -333,6 +349,73 @@ function SupplierModal({ open, onClose, onSubmit, initial, isEditing }: any) {
             className={`flex-1 py-2.5 rounded-xl text-white text-[13px] font-semibold transition-colors ${isValid ? "bg-emerald-600 hover:bg-emerald-700" : "bg-emerald-300 cursor-not-allowed"}`}>
             {isEditing ? "Save Changes" : "Create Supplier"}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUPPLIERS MANAGER MODAL — actual list with view/edit/delete, not just add
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SuppliersManagerModal({ open, onClose, suppliers, onAdd, onEdit, onDelete }: {
+  open: boolean; onClose: () => void; suppliers: any[];
+  onAdd: () => void; onEdit: (s: any) => void; onDelete: (s: any) => void;
+}) {
+  const [q, setQ] = useState("");
+  if (!open) return null;
+
+  const filtered = suppliers.filter((s) =>
+    q === "" || s.name.toLowerCase().includes(q.toLowerCase()) || (s.code || "").toLowerCase().includes(q.toLowerCase())
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0">
+          <h2 className="text-[15px] font-bold text-slate-800">Manage Suppliers</h2>
+          <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400"><X size={16} /></button>
+        </div>
+
+        <div className="p-4 border-b border-slate-100 flex gap-3 flex-shrink-0">
+          <div className="relative flex-1">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search suppliers…"
+              className="w-full pl-9 pr-3 py-2 text-[12px] border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-slate-50" />
+          </div>
+          <button onClick={onAdd}
+            className="flex items-center gap-1.5 text-[12px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-xl transition-colors whitespace-nowrap">
+            <Plus size={13} /> Add Supplier
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
+          {filtered.length === 0 ? (
+            <div className="py-14 text-center text-slate-400 text-[13px]">No suppliers found</div>
+          ) : filtered.map((s) => (
+            <div key={s.id} className="flex items-center gap-3 px-6 py-3.5 hover:bg-slate-50/70 transition-colors">
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center flex-shrink-0">
+                <Building2 size={15} className="text-emerald-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-[13px] font-bold text-slate-700 truncate">{s.name}</p>
+                  <SupplierStatusBadge status={s.status} />
+                </div>
+                <p className="text-[11px] text-slate-400 font-mono mt-0.5">{s.code}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">{s.contactPerson || "—"} · {s.phone || "—"}</p>
+              </div>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <button onClick={() => onEdit(s)} className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors" title="Edit">
+                  <Pencil size={14} />
+                </button>
+                <button onClick={() => onDelete(s)} className="p-2 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-500 transition-colors" title="Delete">
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -725,6 +808,7 @@ function ConfirmDeleteModal({ open, onClose, onConfirm, name }: any) {
 export default function SupplierReturnNotePage() {
   // Suppliers state
   const [suppliers, setSuppliers] = useState(SEED_SUPPLIERS);
+  const [suppliersManagerOpen, setSuppliersManagerOpen] = useState(false);
   const [supplierModalOpen, setSupplierModalOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<any>(null);
   const [deleteSupplierTarget, setDeleteSupplierTarget] = useState<any>(null);
@@ -747,6 +831,18 @@ export default function SupplierReturnNotePage() {
   const submittedCount = returnNotes.filter((n) => n.status === "Submitted").length;
   const approvedCount = returnNotes.filter((n) => n.status === "Approved").length;
 
+  const loadSuppliers = async () => {
+    try {
+      const result = await apiFetch("/suppliers");
+      if (Array.isArray(result)) {
+        setSuppliers(result.map(mapSupplierFromApi));
+        setApiError("");
+      }
+    } catch (error: any) {
+      console.warn("Falling back to seeded suppliers", error);
+    }
+  };
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -762,6 +858,7 @@ export default function SupplierReturnNotePage() {
     };
 
     loadData();
+    loadSuppliers();
   }, []);
 
   // Filtered return notes
@@ -773,27 +870,71 @@ export default function SupplierReturnNotePage() {
     return matchesSearch && matchesStatus && matchesSupplier;
   });
 
-  // Supplier CRUD
-  const createSupplier = (data: any) => {
-    const newSupplier = {
-      ...data,
-      id: uid(),
-      code: data.code || generateSupplierCode(suppliers),
-      createdDate: todayStr(),
-    };
-    setSuppliers((prev) => [...prev, newSupplier]);
+  // Supplier CRUD — wired to the real /suppliers API
+  const createSupplier = async (data: any) => {
+    try {
+      const created = await apiFetch("/suppliers", {
+        method: "POST",
+        body: JSON.stringify({
+          name: data.name,
+          contactPerson: data.contactPerson,
+          email: data.email,
+          phone: data.phone,
+          address: data.address,
+          taxId: data.taxId,
+          status: data.status,
+        }),
+      });
+      setSuppliers((prev) => [mapSupplierFromApi(created), ...prev]);
+      setApiError("");
+    } catch (error: any) {
+      console.warn("API create failed, saving locally", error);
+      const newSupplier = {
+        ...data,
+        id: uid(),
+        code: data.code || generateSupplierCode(suppliers),
+        createdDate: todayStr(),
+      };
+      setSuppliers((prev) => [...prev, newSupplier]);
+      setApiError(error?.message || "Saved locally because the API is unavailable.");
+    }
     setSupplierModalOpen(false);
   };
-  const updateSupplier = (data: any) => {
-    setSuppliers((prev) => prev.map((s) => (s.id === editingSupplier.id ? { ...data, id: s.id } : s)));
+  const updateSupplier = async (data: any) => {
+    try {
+      const saved = await apiFetch(`/suppliers/${editingSupplier.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: data.name,
+          contactPerson: data.contactPerson,
+          email: data.email,
+          phone: data.phone,
+          address: data.address,
+          taxId: data.taxId,
+          status: data.status,
+        }),
+      });
+      setSuppliers((prev) => prev.map((s) => (s.id === editingSupplier.id ? mapSupplierFromApi(saved) : s)));
+      setApiError("");
+    } catch (error: any) {
+      console.warn("API update failed, updating locally", error);
+      setSuppliers((prev) => prev.map((s) => (s.id === editingSupplier.id ? { ...data, id: s.id } : s)));
+      setApiError(error?.message || "Updated locally because the API is unavailable.");
+    }
     setSupplierModalOpen(false);
     setEditingSupplier(null);
   };
-  const deleteSupplier = () => {
-    if (deleteSupplierTarget) {
-      setSuppliers((prev) => prev.filter((s) => s.id !== deleteSupplierTarget.id));
-      setDeleteSupplierTarget(null);
+  const deleteSupplier = async () => {
+    if (!deleteSupplierTarget) return;
+    try {
+      await apiFetch(`/suppliers/${deleteSupplierTarget.id}`, { method: "DELETE" });
+      setApiError("");
+    } catch (error: any) {
+      console.warn("API delete failed, removing locally", error);
+      setApiError(error?.message || "Deleted locally because the API is unavailable.");
     }
+    setSuppliers((prev) => prev.filter((s) => s.id !== deleteSupplierTarget.id));
+    setDeleteSupplierTarget(null);
   };
 
   // Return Note CRUD
@@ -881,7 +1022,7 @@ export default function SupplierReturnNotePage() {
             <p className="text-[13px] text-slate-400 mt-0.5">Manage supplier returns, track defective or wrong items, and maintain supplier records.</p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => { setEditingSupplier(null); setSupplierModalOpen(true); }}
+            <button onClick={() => setSuppliersManagerOpen(true)}
               className="flex items-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2.5 rounded-xl text-[13px] font-semibold transition-colors">
               <Building2 size={14} /> Manage Suppliers
             </button>
@@ -990,7 +1131,17 @@ export default function SupplierReturnNotePage() {
         </div>
       </div>
 
-      {/* Supplier Modal */}
+      {/* Suppliers Manager Modal — the real "manage" list */}
+      <SuppliersManagerModal
+        open={suppliersManagerOpen}
+        onClose={() => setSuppliersManagerOpen(false)}
+        suppliers={suppliers}
+        onAdd={() => { setEditingSupplier(null); setSupplierModalOpen(true); }}
+        onEdit={(s: any) => { setEditingSupplier(s); setSupplierModalOpen(true); }}
+        onDelete={(s: any) => setDeleteSupplierTarget(s)}
+      />
+
+      {/* Supplier Add/Edit Modal */}
       <SupplierModal
         open={supplierModalOpen}
         onClose={() => { setSupplierModalOpen(false); setEditingSupplier(null); }}
