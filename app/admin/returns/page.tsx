@@ -60,6 +60,28 @@ type ReturnNote = {
   items: ReturnItem[];
 };
 
+// Defensive normalizer: guarantees every ReturnNote has a real `items` array
+// and every expected field, regardless of what shape the API actually returns
+// (e.g. a not-yet-fully-implemented endpoint, or a record missing some fields).
+function normalizeReturnNote(raw: any, fallbackId: string): ReturnNote {
+  return {
+    id: raw?.id || raw?.docId || fallbackId,
+    fromLocationId: raw?.fromLocationId || "",
+    fromSiteId: raw?.fromSiteId || "",
+    toLocationId: raw?.toLocationId || "",
+    toSiteId: raw?.toSiteId || "",
+    returnDate: raw?.returnDate || (raw?.createdAt ? new Date(raw.createdAt).toISOString().slice(0, 10) : ""),
+    remarks: raw?.remarks || raw?.notes || "",
+    items: Array.isArray(raw?.items)
+      ? raw.items.map((item: any, index: number) => ({
+          id: item?.id || `${raw?.id || fallbackId}-item-${index + 1}`,
+          itemName: item?.itemName || item?.name || "",
+          quantity: Number(item?.quantity || 0),
+        }))
+      : [],
+  };
+}
+
 // ─── Sample data ──────────────────────────────────────────────────────────
 const SAMPLE_LOCATIONS: Location[] = [
   {
@@ -718,14 +740,15 @@ export default function ReturnNotesPage() {
         setLoading(true);
         setApiError("");
         const [notesData, locData, itemsData] = await Promise.all([
-          apiFetch("/return-notes"),
+          apiFetch("/transfer-notes"),
           apiFetch("/site-locations"),
           apiFetch("/items"),
         ]);
         if (Array.isArray(notesData)) {
-          setNotes(notesData);
+          const normalized = notesData.map((n: any, index: number) => normalizeReturnNote(n, `IRN-${pad(index + 1)}`));
+          setNotes(normalized);
           setSelectedId((current) =>
-            current && notesData.some((n: ReturnNote) => n.id === current) ? current : notesData[0]?.id ?? null
+            current && normalized.some((n) => n.id === current) ? current : normalized[0]?.id ?? null
           );
         }
         if (Array.isArray(locData)) {
@@ -782,13 +805,14 @@ export default function ReturnNotesPage() {
     const newNote: ReturnNote = { ...data, id: localId };
 
     try {
-      const saved = await apiFetch("/return-notes", {
+      const saved = await apiFetch("/transfer-notes", {
         method: "POST",
         body: JSON.stringify(data),
       });
-      setNotes((prev) => [saved, ...prev]);
+      const normalized = normalizeReturnNote(saved, localId);
+      setNotes((prev) => [normalized, ...prev]);
       setShowAdd(false);
-      setSelectedId(saved.id);
+      setSelectedId(normalized.id);
     } catch (error: any) {
       console.warn("API unavailable, using local state:", error);
       setNotes((prev) => [newNote, ...prev]);
@@ -803,7 +827,7 @@ export default function ReturnNotesPage() {
     if (updated === null) {
       if (!selectedId) return;
       try {
-        await apiFetch(`/return-notes/${selectedId}`, { method: "DELETE" });
+        await apiFetch(`/transfer-notes/${selectedId}`, { method: "DELETE" });
       } catch (error: any) {
         console.warn("API delete failed, removing locally:", error);
         setApiError(error?.message || "Deleted locally (API unavailable).");
@@ -816,11 +840,12 @@ export default function ReturnNotesPage() {
     }
 
     try {
-      const saved = await apiFetch(`/return-notes/${updated.id}`, {
+      const saved = await apiFetch(`/transfer-notes/${updated.id}`, {
         method: "PUT",
         body: JSON.stringify(updated),
       });
-      setNotes((prev) => prev.map((n) => (n.id === saved.id ? saved : n)));
+      const normalized = normalizeReturnNote(saved, updated.id);
+      setNotes((prev) => prev.map((n) => (n.id === normalized.id ? normalized : n)));
     } catch (error: any) {
       console.warn("API update failed, updating locally:", error);
       setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
