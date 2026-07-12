@@ -2,8 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-// Verify this path exactly matches your folder structure:
-import { apiFetch, setStoredAuthToken } from "../../lib/api"; 
+import { apiFetch, setStoredAuthToken } from "../../lib/api";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -34,7 +33,6 @@ export default function AdminLoginPage() {
       const roleTitle = String(user?.role?.position_title || user?.role?.name || user?.role?.title || "").toLowerCase();
       const isAdminRole = ["admin", "super", "manager"].some((keyword) => roleTitle.includes(keyword));
       const targetRoute = isAdminRole ? "/admin" : "/user";
-      
       router.replace(targetRoute);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Unable to sign in right now.");
@@ -45,7 +43,6 @@ export default function AdminLoginPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center p-4 overflow-hidden relative">
-      {/* Background Gradients */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{

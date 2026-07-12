@@ -60,16 +60,62 @@ type ReturnNote = {
   items: ReturnItem[];
 };
 
+function textValue(value: any, fallback = "") {
+  if (value == null) return fallback;
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (typeof value === "object") {
+    return textValue(value.name || value.label || value.id, fallback);
+  }
+  return fallback;
+}
+
+// Some backends send location/site ids as plain strings, others as nested
+// objects (e.g. { id, name }) or under a different key entirely. This pulls
+// out something usable, preferring an explicit id but falling back to a name
+// so lookups still have something to match against (see resolveLocation /
+// resolveSite below).
+function extractRefId(value: any): string {
+  if (value == null) return "";
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (typeof value === "object") {
+    return textValue(
+      value.id ?? value._id ?? value.siteId ?? value.locationId ?? value.code ?? value.name,
+      ""
+    );
+  }
+  return "";
+}
+
+// Resolve a location by id, falling back to matching on name if the id
+// doesn't line up (covers backends that send inconsistent id fields).
+function resolveLocation(locations: Location[], ref: string): Location | undefined {
+  if (!ref) return undefined;
+  return (
+    locations.find((l) => l.id === ref) ||
+    locations.find((l) => l.name === ref)
+  );
+}
+
+// Resolve a site within a location by id, falling back to name.
+function resolveSite(location: Location | undefined, ref: string): Site | undefined {
+  if (!location || !ref) return undefined;
+  return (
+    location.sites.find((s) => s.id === ref) ||
+    location.sites.find((s) => s.name === ref)
+  );
+}
+
 // Defensive normalizer: guarantees every ReturnNote has a real `items` array
 // and every expected field, regardless of what shape the API actually returns
 // (e.g. a not-yet-fully-implemented endpoint, or a record missing some fields).
 function normalizeReturnNote(raw: any, fallbackId: string): ReturnNote {
   return {
     id: raw?.id || raw?.docId || fallbackId,
-    fromLocationId: raw?.fromLocationId || "",
-    fromSiteId: raw?.fromSiteId || "",
-    toLocationId: raw?.toLocationId || "",
-    toSiteId: raw?.toSiteId || "",
+    fromLocationId: extractRefId(raw?.fromLocationId ?? raw?.fromLocation),
+    fromSiteId: extractRefId(raw?.fromSiteId ?? raw?.fromSite),
+    toLocationId: extractRefId(raw?.toLocationId ?? raw?.toLocation),
+    toSiteId: extractRefId(raw?.toSiteId ?? raw?.toSite),
     returnDate: raw?.returnDate || (raw?.createdAt ? new Date(raw.createdAt).toISOString().slice(0, 10) : ""),
     remarks: raw?.remarks || raw?.notes || "",
     items: Array.isArray(raw?.items)
@@ -81,99 +127,6 @@ function normalizeReturnNote(raw: any, fallbackId: string): ReturnNote {
       : [],
   };
 }
-
-// ─── Sample data ──────────────────────────────────────────────────────────
-const SAMPLE_LOCATIONS: Location[] = [
-  {
-    id: "LOC-ADM-0001",
-    name: "Administrative Sites",
-    sites: [
-      { id: "SITE-ADM-WH1", name: "Warehouse 1" },
-      { id: "SITE-ADM-WH2", name: "Warehouse 2" },
-      { id: "SITE-ADM-WH3", name: "Warehouse 3" },
-      { id: "SITE-ADM-RS1", name: "Repair Shop 1" },
-      { id: "SITE-ADM-RS2", name: "Repair Shop 2" },
-      { id: "SITE-ADM-RS3", name: "Repair Shop 3" },
-    ],
-  },
-  {
-    id: "LOC-OP-0001",
-    name: "Operational Sites",
-    sites: [
-      { id: "SITE-OP-COL", name: "Colombo City Tower" },
-      { id: "SITE-OP-NBO", name: "Nairobi Business Park" },
-    ],
-  },
-];
-
-const SAMPLE_ITEMS = [
-  "Cement (50kg bags)",
-  "Steel Rebars (12mm)",
-  "Steel Rebars (16mm)",
-  "Plywood Sheets (4x8 ft)",
-  "Timber Lumber (2x4)",
-  "Nails (3 inch)",
-  "Screws (self-tapping)",
-  "Concrete Blocks",
-  "Bricks",
-  "Sand (cubic meter)",
-  "Aggregate (20mm)",
-  "Paint (5L buckets)",
-  "Roofing Sheets",
-  "Insulation Panels",
-  "Electrical Cables (2.5mm)",
-  "PVC Pipes (4 inch)",
-  "Safety Helmets",
-  "Safety Gloves",
-  "Safety Boots",
-  "Power Drill",
-  "Angle Grinder",
-  "Concrete Mixer",
-  "Generator",
-  "Water Pump",
-];
-
-const SEED_RETURNS: ReturnNote[] = [
-  {
-    id: "IRN-0001",
-    fromLocationId: "LOC-OP-0001",
-    fromSiteId: "SITE-OP-COL",
-    toLocationId: "LOC-ADM-0001",
-    toSiteId: "SITE-ADM-WH1",
-    returnDate: "2025-03-20",
-    remarks: "Return of surplus cement after tower completion",
-    items: [
-      { id: "ritem-1", itemName: "Cement (50kg bags)", quantity: 20 },
-      { id: "ritem-2", itemName: "Steel Rebars (12mm)", quantity: 10 },
-    ],
-  },
-  {
-    id: "IRN-0002",
-    fromLocationId: "LOC-OP-0001",
-    fromSiteId: "SITE-OP-NBO",
-    toLocationId: "LOC-ADM-0001",
-    toSiteId: "SITE-ADM-WH2",
-    returnDate: "2025-03-18",
-    remarks: "Return of unused materials from phase 1",
-    items: [
-      { id: "ritem-3", itemName: "Sand (cubic meter)", quantity: 5 },
-      { id: "ritem-4", itemName: "Aggregate (20mm)", quantity: 8 },
-    ],
-  },
-  {
-    id: "IRN-0003",
-    fromLocationId: "LOC-ADM-0001",
-    fromSiteId: "SITE-ADM-RS1",
-    toLocationId: "LOC-OP-0001",
-    toSiteId: "SITE-OP-COL",
-    returnDate: "2025-03-16",
-    remarks: "Repaired tools returned to site",
-    items: [
-      { id: "ritem-5", itemName: "Power Drill", quantity: 1 },
-      { id: "ritem-6", itemName: "Angle Grinder", quantity: 1 },
-    ],
-  },
-];
 
 // ─── Combobox component ────────────────────────────────────────────────────
 function Combobox({
@@ -329,7 +282,6 @@ function buildDefaultForm() {
     toSiteId: "",
     returnDate: new Date().toISOString().slice(0, 10),
     remarks: "",
-    // FIX: itemIdCounter increment isolated here, not at render time
     items: [{ id: `ritem-${++itemIdCounter}`, itemName: "", quantity: 1 }],
   };
 }
@@ -349,7 +301,6 @@ function ReturnNoteFormModal({
   locations: Location[];
   availableItems?: AvailableItem[];
 }) {
-  // FIX: lazy initialiser so the factory runs exactly once on mount
   const [form, setForm] = useState(() =>
     initial
       ? { ...initial, items: initial.items.length ? initial.items : [{ id: `ritem-${++itemIdCounter}`, itemName: "", quantity: 1 }] }
@@ -387,7 +338,6 @@ function ReturnNoteFormModal({
         newItems[index] = { ...newItems[index], itemName: "", quantity: 1 };
         return { ...prev, items: newItems };
       }
-      // FIX: use ReturnItem (not RepairItem) — correct type for this file
       return { ...prev, items: prev.items.filter((_: ReturnItem, i: number) => i !== index) };
     });
   };
@@ -400,9 +350,7 @@ function ReturnNoteFormModal({
     form.items.length > 0 &&
     form.items.every((item) => item.itemName.trim() && item.quantity > 0);
 
-  const itemOptions = availableItems.length
-    ? availableItems.map((item) => item.label)
-    : SAMPLE_ITEMS;
+  const itemOptions = availableItems.map((item) => item.label);
 
   return (
     <Modal title={isEdit ? "Edit Return Note" : "New Return Note"} onClose={onClose}>
@@ -418,7 +366,6 @@ function ReturnNoteFormModal({
               <select
                 value={form.fromLocationId}
                 onChange={(e) => {
-                  // FIX: reset fromSiteId when fromLocation changes
                   setForm((prev) => ({ ...prev, fromLocationId: e.target.value, fromSiteId: "" }));
                 }}
                 className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
@@ -457,7 +404,6 @@ function ReturnNoteFormModal({
               <select
                 value={form.toLocationId}
                 onChange={(e) => {
-                  // FIX: reset toSiteId when toLocation changes
                   setForm((prev) => ({ ...prev, toLocationId: e.target.value, toSiteId: "" }));
                 }}
                 className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
@@ -599,10 +545,10 @@ function ReturnNoteDetail({ note, onUpdate, onClose, locations, availableItems }
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
 
-  const fromLoc = locations.find((l) => l.id === note.fromLocationId);
-  const fromSite = fromLoc?.sites.find((s) => s.id === note.fromSiteId);
-  const toLoc = locations.find((l) => l.id === note.toLocationId);
-  const toSite = toLoc?.sites.find((s) => s.id === note.toSiteId);
+  const fromLoc = resolveLocation(locations, note.fromLocationId);
+  const fromSite = resolveSite(fromLoc, note.fromSiteId);
+  const toLoc = resolveLocation(locations, note.toLocationId);
+  const toSite = resolveSite(toLoc, note.toSiteId);
   const totalItems = note.items.length;
 
   return (
@@ -725,10 +671,10 @@ function ReturnNoteDetail({ note, onUpdate, onClose, locations, availableItems }
 
 // ─── Main Page ─────────────────────────────────────────────────────────────
 export default function ReturnNotesPage() {
-  const [notes, setNotes] = useState<ReturnNote[]>(SEED_RETURNS);
-  const [locations, setLocations] = useState<Location[]>(SAMPLE_LOCATIONS);
+  const [notes, setNotes] = useState<ReturnNote[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
   const [availableItems, setAvailableItems] = useState<AvailableItem[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(SEED_RETURNS[0]?.id ?? null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [apiError, setApiError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -739,27 +685,43 @@ export default function ReturnNotesPage() {
       try {
         setLoading(true);
         setApiError("");
-        const [notesData, locData, itemsData] = await Promise.all([
-          apiFetch("/transfer-notes"),
+        // FIX: this was fetching "/transfer-notes" — wrong resource for a
+        // Return Notes page. The backend exposes a dedicated "/return-notes"
+        // endpoint (confirmed via server route log), so use that instead.
+        const [notesResult, locResult, itemsResult] = await Promise.allSettled([
+          apiFetch("/return-notes"),
           apiFetch("/site-locations"),
           apiFetch("/items"),
         ]);
-        if (Array.isArray(notesData)) {
+
+        const notesData = notesResult.status === "fulfilled" ? notesResult.value : null;
+        const locData = locResult.status === "fulfilled" ? locResult.value : null;
+        const itemsData = itemsResult.status === "fulfilled" ? itemsResult.value : null;
+
+        if (Array.isArray(notesData) && notesData.length > 0) {
           const normalized = notesData.map((n: any, index: number) => normalizeReturnNote(n, `IRN-${pad(index + 1)}`));
           setNotes(normalized);
           setSelectedId((current) =>
             current && normalized.some((n) => n.id === current) ? current : normalized[0]?.id ?? null
           );
         }
-        if (Array.isArray(locData)) {
+        if (Array.isArray(locData) && locData.length > 0) {
+          // FIX: id fields on the location/site records aren't guaranteed to
+          // be called "id" — fall back to other common id keys so sites
+          // don't silently end up with an undefined id (which breaks lookup).
           const mapped = locData.map((l: any) => ({
-            id: l.id,
+            id: textValue(l.id ?? l._id ?? l.locationId, ""),
             name: l.siteName || l.name,
-            sites: (l.subLevels || []).map((s: any) => ({ id: s.id, name: s.name })),
-          }));
-          setLocations(mapped);
+            sites: (Array.isArray(l.subLevels) ? l.subLevels : []).map((s: any) => ({
+              id: textValue(s.id ?? s._id ?? s.siteId ?? s.code ?? s.name, ""),
+              name: s.name,
+            })),
+          })).filter((l: Location) => l.id && l.name && l.sites.length > 0);
+          if (mapped.length > 0) {
+            setLocations(mapped);
+          }
         }
-        if (Array.isArray(itemsData)) {
+        if (Array.isArray(itemsData) && itemsData.length > 0) {
           const mappedItems = itemsData
             .map((entry: any) => {
               const item = entry?.item ?? entry;
@@ -770,8 +732,12 @@ export default function ReturnNotesPage() {
             .filter(Boolean) as AvailableItem[];
           setAvailableItems(mappedItems);
         }
+        const failures = [notesResult, locResult, itemsResult].filter((result) => result.status === "rejected");
+        if (failures.length > 0) {
+          setApiError("Some live data is unavailable. Please check your connection and refresh.");
+        }
       } catch (error: any) {
-        console.warn("Using seed data", error);
+        console.warn("Unable to load return notes data", error);
         setApiError(error?.message || "Unable to load data.");
       } finally {
         setLoading(false);
@@ -782,10 +748,10 @@ export default function ReturnNotesPage() {
 
   const filtered = notes.filter((n) => {
     const q = search.toLowerCase();
-    const fromLoc = locations.find((l) => l.id === n.fromLocationId);
-    const fromSite = fromLoc?.sites.find((s) => s.id === n.fromSiteId);
-    const toLoc = locations.find((l) => l.id === n.toLocationId);
-    const toSite = toLoc?.sites.find((s) => s.id === n.toSiteId);
+    const fromLoc = resolveLocation(locations, n.fromLocationId);
+    const fromSite = resolveSite(fromLoc, n.fromSiteId);
+    const toLoc = resolveLocation(locations, n.toLocationId);
+    const toSite = resolveSite(toLoc, n.toSiteId);
     const fromName = fromSite?.name || "";
     const toName = toSite?.name || "";
     const itemNames = n.items.map((i) => i.itemName).join(" ").toLowerCase();
@@ -799,13 +765,13 @@ export default function ReturnNotesPage() {
 
   const selectedNote = notes.find((n) => n.id === selectedId);
 
-  // FIX: generate local ID and fall back to local state when API is unavailable
   const handleCreate = async (data: ReturnNote) => {
     const localId = `IRN-${pad(notes.length + 1)}`;
     const newNote: ReturnNote = { ...data, id: localId };
 
     try {
-      const saved = await apiFetch("/transfer-notes", {
+      // FIX: was posting to "/transfer-notes"
+      const saved = await apiFetch("/return-notes", {
         method: "POST",
         body: JSON.stringify(data),
       });
@@ -822,17 +788,16 @@ export default function ReturnNotesPage() {
     }
   };
 
-  // FIX: fall back to local state mutations when API fails
   const handleUpdate = async (updated: ReturnNote | null) => {
     if (updated === null) {
       if (!selectedId) return;
       try {
-        await apiFetch(`/transfer-notes/${selectedId}`, { method: "DELETE" });
+        // FIX: was deleting via "/transfer-notes/:id"
+        await apiFetch(`/return-notes/${selectedId}`, { method: "DELETE" });
       } catch (error: any) {
         console.warn("API delete failed, removing locally:", error);
         setApiError(error?.message || "Deleted locally (API unavailable).");
       } finally {
-        // Always remove from local state regardless of API result
         setNotes((prev) => prev.filter((n) => n.id !== selectedId));
         setSelectedId(null);
       }
@@ -840,7 +805,8 @@ export default function ReturnNotesPage() {
     }
 
     try {
-      const saved = await apiFetch(`/transfer-notes/${updated.id}`, {
+      // FIX: was updating via "/transfer-notes/:id"
+      const saved = await apiFetch(`/return-notes/${updated.id}`, {
         method: "PUT",
         body: JSON.stringify(updated),
       });
@@ -881,15 +847,17 @@ export default function ReturnNotesPage() {
           {loading ? (
             <div className="py-10 text-center text-sm text-slate-400">Loading...</div>
           ) : filtered.length === 0 ? (
-            <div className="py-10 text-center text-sm text-slate-400">No return notes found.</div>
+            <div className="py-10 text-center text-sm text-slate-400">
+            {notes.length === 0 ? "No return notes yet." : "No return notes match your search."}
+          </div>
           ) : (
             filtered.map((n) => {
               const color = getNoteColor(n.id);
               const isSelected = selectedId === n.id;
-              const fromLoc = locations.find((l) => l.id === n.fromLocationId);
-              const fromSite = fromLoc?.sites.find((s) => s.id === n.fromSiteId);
-              const toLoc = locations.find((l) => l.id === n.toLocationId);
-              const toSite = toLoc?.sites.find((s) => s.id === n.toSiteId);
+              const fromLoc = resolveLocation(locations, n.fromLocationId);
+              const fromSite = resolveSite(fromLoc, n.fromSiteId);
+              const toLoc = resolveLocation(locations, n.toLocationId);
+              const toSite = resolveSite(toLoc, n.toSiteId);
               return (
                 <div
                   key={n.id}

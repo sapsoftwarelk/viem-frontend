@@ -81,14 +81,31 @@ function normalizeTransferItem(item: any, index: number): TransferItem {
   };
 }
 
+// Some backends send fromLocationId/toSiteId etc. as plain id strings, but
+// others send them as nested objects (e.g. { id, name }) or use a different
+// id field entirely. This pulls out a usable id, preferring an explicit id
+// field but falling back to a name so lookups still have something to match
+// against (see resolveSite/resolveLocation below).
+function extractRefId(value: any): string {
+  if (value == null) return "";
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (typeof value === "object") {
+    return textValue(
+      value.id ?? value._id ?? value.siteId ?? value.locationId ?? value.code ?? value.name,
+      ""
+    );
+  }
+  return "";
+}
+
 function normalizeTransferNote(note: any, fallbackIndex = 0): TransferNote {
   const items = Array.isArray(note?.items) ? note.items : [];
   return {
     id: textValue(note?.id, `ITN-${pad(fallbackIndex + 1)}`),
-    fromLocationId: textValue(note?.fromLocationId),
-    fromSiteId: textValue(note?.fromSiteId),
-    toLocationId: textValue(note?.toLocationId),
-    toSiteId: textValue(note?.toSiteId),
+    fromLocationId: extractRefId(note?.fromLocationId ?? note?.fromLocation),
+    fromSiteId: extractRefId(note?.fromSiteId ?? note?.fromSite),
+    toLocationId: extractRefId(note?.toLocationId ?? note?.toLocation),
+    toSiteId: extractRefId(note?.toSiteId ?? note?.toSite),
     transferDate: textValue(note?.transferDate, new Date().toISOString().slice(0, 10)),
     remarks: textValue(note?.remarks),
     items: items.map(normalizeTransferItem),
@@ -161,6 +178,25 @@ function mapInventoryOptions(itemsData: any[]): AvailableItem[] {
       } as AvailableItem;
     })
     .filter(Boolean) as AvailableItem[];
+}
+
+// Resolve a location by id, falling back to matching on name if the id
+// doesn't line up (covers backends that send inconsistent id fields).
+function resolveLocation(locations: Location[], ref: string): Location | undefined {
+  if (!ref) return undefined;
+  return (
+    locations.find((l) => l.id === ref) ||
+    locations.find((l) => l.name === ref)
+  );
+}
+
+// Resolve a site within a location by id, falling back to name.
+function resolveSite(location: Location | undefined, ref: string): Site | undefined {
+  if (!location || !ref) return undefined;
+  return (
+    location.sites.find((s) => s.id === ref) ||
+    location.sites.find((s) => s.name === ref)
+  );
 }
 
 function getItemOptions(availableItems: AvailableItem[]) {
@@ -443,14 +479,35 @@ function TransferNoteFormModal({
     setForm((prev: any) => ({ ...prev, [field]: value }));
   };
 
+  // FIX: use the functional updater and always derive `newItems` from the
+  // latest `prev` state (not from the `form` closure). Previously this read
+  // `form.items` directly, so two handleItemChange calls fired back-to-back
+  // in the same render (as the item combobox used to do) would both branch
+  // off the same stale array and the second call's write would clobber the
+  // first — this is what made item selection appear broken.
   const handleItemChange = (
     index: number,
     field: keyof TransferItem,
     value: any
   ) => {
-    const newItems = [...form.items];
-    newItems[index] = { ...newItems[index], [field]: value };
-    setForm((prev: any) => ({ ...prev, items: newItems }));
+    setForm((prev: any) => {
+      const newItems = [...prev.items];
+      newItems[index] = { ...newItems[index], [field]: value };
+      return { ...prev, items: newItems };
+    });
+  };
+
+  // FIX: set multiple fields on the same item row atomically in one update,
+  // instead of exposing a helper that callers might invoke twice in a row.
+  const handleItemFieldsChange = (
+    index: number,
+    fields: Partial<TransferItem>
+  ) => {
+    setForm((prev: any) => {
+      const newItems = [...prev.items];
+      newItems[index] = { ...newItems[index], ...fields };
+      return { ...prev, items: newItems };
+    });
   };
 
   const addItem = () => {
@@ -648,9 +705,21 @@ function TransferNoteFormModal({
                       options={itemOptions}
                       value={item.itemName}
                       onChange={(val) => {
-                        const matchedItem = availableItems.find((candidate: AvailableItem) => candidate.label === val);
-                        handleItemChange(index, "itemName", matchedItem?.name || val);
-                        handleItemChange(index, "itemId", matchedItem?.id || undefined);
+                        // FIX: previously this called handleItemChange twice
+                        // in a row (once for itemName, once for itemId).
+                        // Both calls read the same stale `form.items` from
+                        // this render's closure, so the second call's write
+                        // overwrote the first — itemName never actually
+                        // stuck, which made items look unselectable.
+                        // Now we set both fields together in a single
+                        // functional state update.
+                        const matchedItem = availableItems.find(
+                          (candidate: AvailableItem) => candidate.label === val
+                        );
+                        handleItemFieldsChange(index, {
+                          itemName: matchedItem?.name || val,
+                          itemId: matchedItem?.id || undefined,
+                        });
                       }}
                       placeholder="Select or search item..."
                     />
@@ -768,10 +837,10 @@ function TransferNoteDetail({ note, onUpdate, onClose, locations, availableItems
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
 
-  const fromLoc = locations.find((l: Location) => l.id === note.fromLocationId);
-  const fromSite = fromLoc?.sites.find((s: Site) => s.id === note.fromSiteId);
-  const toLoc = locations.find((l: Location) => l.id === note.toLocationId);
-  const toSite = toLoc?.sites.find((s: Site) => s.id === note.toSiteId);
+  const fromLoc = resolveLocation(locations, note.fromLocationId);
+  const fromSite = resolveSite(fromLoc, note.fromSiteId);
+  const toLoc = resolveLocation(locations, note.toLocationId);
+  const toSite = resolveSite(toLoc, note.toSiteId);
 
   const totalItems = note.items.length;
 
@@ -983,10 +1052,10 @@ export default function TransferNotesPage() {
         }
         if (Array.isArray(locData) && locData.length > 0) {
           const mapped = locData.map((l: any) => ({
-            id: l.id,
+            id: textValue(l.id ?? l._id ?? l.locationId, ""),
             name: l.siteName || l.name,
             sites: (Array.isArray(l.subLevels) ? l.subLevels : []).map((s: any) => ({
-              id: s.id,
+              id: textValue(s.id ?? s._id ?? s.siteId ?? s.code ?? s.name, ""),
               name: s.name,
             })),
           })).filter((l: Location) => l.id && l.name && l.sites.length > 0);
@@ -1014,10 +1083,10 @@ export default function TransferNotesPage() {
 
   const filtered = notes.filter((n) => {
     const q = search.toLowerCase();
-    const fromLoc = locations.find((l) => l.id === n.fromLocationId);
-    const fromSite = fromLoc?.sites.find((s) => s.id === n.fromSiteId);
-    const toLoc = locations.find((l) => l.id === n.toLocationId);
-    const toSite = toLoc?.sites.find((s) => s.id === n.toSiteId);
+    const fromLoc = resolveLocation(locations, n.fromLocationId);
+    const fromSite = resolveSite(fromLoc, n.fromSiteId);
+    const toLoc = resolveLocation(locations, n.toLocationId);
+    const toSite = resolveSite(toLoc, n.toSiteId);
     const itemNames = n.items.map((i) => textValue(i.itemName)).join(" ").toLowerCase();
     return (
       textValue(n.id).toLowerCase().includes(q) ||
@@ -1113,12 +1182,10 @@ export default function TransferNotesPage() {
             filtered.map((n) => {
               const color = getNoteColor(n.id);
               const isSelected = selectedId === n.id;
-              const fromLoc = locations.find((l) => l.id === n.fromLocationId);
-              const fromSite = fromLoc?.sites.find(
-                (s) => s.id === n.fromSiteId
-              );
-              const toLoc = locations.find((l) => l.id === n.toLocationId);
-              const toSite = toLoc?.sites.find((s) => s.id === n.toSiteId);
+              const fromLoc = resolveLocation(locations, n.fromLocationId);
+              const fromSite = resolveSite(fromLoc, n.fromSiteId);
+              const toLoc = resolveLocation(locations, n.toLocationId);
+              const toSite = resolveSite(toLoc, n.toSiteId);
               return (
                 <div
                   key={n.id}
