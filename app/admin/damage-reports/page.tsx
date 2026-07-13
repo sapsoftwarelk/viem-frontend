@@ -61,6 +61,14 @@ type AvailableItem = {
   label: string;
 };
 
+// Real employee fetched from the backend, used to populate the
+// "Responsible Person" combobox instead of a hardcoded list.
+type Employee = {
+  id: string;
+  name: string;
+  label: string;
+};
+
 type DamageReportForm = {
   locationId: string;
   siteId: string;
@@ -124,19 +132,6 @@ const SAMPLE_ITEMS = [
   "Concrete Mixer",
   "Generator",
   "Water Pump",
-];
-
-const SAMPLE_PERSONS = [
-  "Site Manager",
-  "Project Engineer",
-  "Safety Officer",
-  "Foreman",
-  "Store Keeper",
-  "Procurement Officer",
-  "Site Supervisor",
-  "Electrician",
-  "Plumber",
-  "Carpenter",
 ];
 
 const SEED_REPORTS: DamageReport[] = [
@@ -339,6 +334,7 @@ function DamageReportFormModal({
   isEdit = false,
   locations,
   availableItems = [],
+  availablePersons = [],
 }: {
   initial?: DamageReportForm;
   onClose: () => void;
@@ -346,6 +342,7 @@ function DamageReportFormModal({
   isEdit?: boolean;
   locations: Location[];
   availableItems?: AvailableItem[];
+  availablePersons?: Employee[];
 }) {
   const [form, setForm] = useState<DamageReportForm>(initial ?? {
     locationId: "",
@@ -388,6 +385,8 @@ function DamageReportFormModal({
   const itemOptions = availableItems.length
     ? availableItems.map((item) => item.label)
     : SAMPLE_ITEMS;
+
+  const personOptions = availablePersons.map((person) => person.label);
 
   return (
     <Modal title={isEdit ? "Edit Damage Report" : "New Damage Report"} onClose={onClose}>
@@ -462,10 +461,13 @@ function DamageReportFormModal({
           <div>
             <label className="block text-sm font-semibold text-slate-600 mb-1.5">Responsible Person *</label>
             <Combobox
-              options={SAMPLE_PERSONS}
+              options={personOptions}
               value={form.responsiblePerson}
-              onChange={(val) => handleChange("responsiblePerson", val)}
-              placeholder="Select or type a name..."
+              onChange={(val) => {
+                const matchedPerson = availablePersons.find((candidate) => candidate.label === val);
+                handleChange("responsiblePerson", matchedPerson?.name || val);
+              }}
+              placeholder={personOptions.length ? "Search or select a person..." : "No employees found — type a name..."}
             />
           </div>
         </div>
@@ -513,12 +515,14 @@ function DamageReportDetail({
   onClose,
   locations,
   availableItems,
+  availablePersons,
 }: {
   report: DamageReport;
   onUpdate: (updated: DamageReport | null) => void;
   onClose: () => void;
   locations: Location[];
   availableItems: AvailableItem[];
+  availablePersons: Employee[];
 }) {
   const color = getReportColor(report.id);
   const [showEdit, setShowEdit] = useState(false);
@@ -608,6 +612,7 @@ function DamageReportDetail({
           initial={report}
           locations={locations}
           availableItems={availableItems}
+          availablePersons={availablePersons}
           onClose={() => setShowEdit(false)}
           onSave={(data: DamageReportForm) => { onUpdate({ ...report, ...data }); setShowEdit(false); }}
         />
@@ -628,6 +633,7 @@ export default function DamageReportsPage() {
   const [reports, setReports] = useState<DamageReport[]>(SEED_REPORTS);
   const [locations, setLocations] = useState<Location[]>(SAMPLE_LOCATIONS);
   const [availableItems, setAvailableItems] = useState<AvailableItem[]>([]);
+  const [availablePersons, setAvailablePersons] = useState<Employee[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [apiError, setApiError] = useState("");
@@ -639,10 +645,11 @@ export default function DamageReportsPage() {
       try {
         setLoading(true);
         setApiError("");
-        const [reportsData, locData, itemsData] = await Promise.all([
+        const [reportsData, locData, itemsData, employeesData] = await Promise.all([
           apiFetch("/damage-reports"),
           apiFetch("/site-locations"),
           apiFetch("/items"),
+          apiFetch("/employees"),
         ]);
         if (Array.isArray(reportsData)) {
           setReports(reportsData);
@@ -668,6 +675,22 @@ export default function DamageReportsPage() {
             })
             .filter(Boolean) as AvailableItem[];
           setAvailableItems(mappedItems);
+        }
+        if (Array.isArray(employeesData)) {
+          const mappedPersons = employeesData
+            .map((entry: any) => {
+              const name = String(
+                entry?.fullName || entry?.name ||
+                [entry?.firstName, entry?.lastName].filter(Boolean).join(" ") ||
+                ""
+              ).trim();
+              const id = String(entry?.id || "").trim();
+              const role = entry?.role?.name || entry?.designation || entry?.jobTitle;
+              const label = role ? `${name} (${role})` : name;
+              return name && id ? { id, name, label } : null;
+            })
+            .filter(Boolean) as Employee[];
+          setAvailablePersons(mappedPersons);
         }
       } catch (error: any) {
         console.warn("Using seed data", error);
@@ -811,6 +834,7 @@ export default function DamageReportsPage() {
             report={selectedReport}
             locations={locations}
             availableItems={availableItems}
+            availablePersons={availablePersons}
             onUpdate={handleUpdate}
             onClose={() => setSelectedId(null)}
           />
@@ -826,6 +850,7 @@ export default function DamageReportsPage() {
         <DamageReportFormModal
           locations={locations}
           availableItems={availableItems}
+          availablePersons={availablePersons}
           onClose={() => setShowAdd(false)}
           onSave={handleCreate}
         />
