@@ -5,7 +5,7 @@ import { apiFetch } from "../../../lib/api";
 import {
   Plus, Search, Edit2, Trash2, X,
   Building2, MapPin, Phone, Calendar, Clock,
-  FolderTree, AlertCircle, User,
+  FolderTree, AlertCircle, User, History
 } from "lucide-react";
 import Badge from "@/components/shared/Badge";
 
@@ -87,66 +87,6 @@ const LOCATION_COLORS = [
     idChip:     "bg-rose-100 text-rose-700",
     subBorder:  "border-rose-100",
   },
-  {
-    dot:        "bg-amber-500",
-    ring:       "ring-amber-300",
-    border:     "border-amber-300",
-    cardBg:     "bg-amber-50/40",
-    headerBg:   "bg-amber-50",
-    headerBorder:"border-amber-200",
-    avatarBg:   "bg-amber-500",
-    avatarText:  "text-white",
-    accent:     "text-amber-600",
-    activeCard: "border-amber-400 bg-amber-50/50",
-    filterActive:"bg-amber-600",
-    idChip:     "bg-amber-100 text-amber-700",
-    subBorder:  "border-amber-100",
-  },
-  {
-    dot:        "bg-indigo-500",
-    ring:       "ring-indigo-300",
-    border:     "border-indigo-300",
-    cardBg:     "bg-indigo-50/40",
-    headerBg:   "bg-indigo-50",
-    headerBorder:"border-indigo-200",
-    avatarBg:   "bg-indigo-500",
-    avatarText:  "text-white",
-    accent:     "text-indigo-600",
-    activeCard: "border-indigo-400 bg-indigo-50/50",
-    filterActive:"bg-indigo-600",
-    idChip:     "bg-indigo-100 text-indigo-700",
-    subBorder:  "border-indigo-100",
-  },
-  {
-    dot:        "bg-teal-500",
-    ring:       "ring-teal-300",
-    border:     "border-teal-300",
-    cardBg:     "bg-teal-50/40",
-    headerBg:   "bg-teal-50",
-    headerBorder:"border-teal-200",
-    avatarBg:   "bg-teal-500",
-    avatarText:  "text-white",
-    accent:     "text-teal-600",
-    activeCard: "border-teal-400 bg-teal-50/50",
-    filterActive:"bg-teal-600",
-    idChip:     "bg-teal-100 text-teal-700",
-    subBorder:  "border-teal-100",
-  },
-  {
-    dot:        "bg-pink-500",
-    ring:       "ring-pink-300",
-    border:     "border-pink-300",
-    cardBg:     "bg-pink-50/40",
-    headerBg:   "bg-pink-50",
-    headerBorder:"border-pink-200",
-    avatarBg:   "bg-pink-500",
-    avatarText:  "text-white",
-    accent:     "text-pink-600",
-    activeCard: "border-pink-400 bg-pink-50/50",
-    filterActive:"bg-pink-600",
-    idChip:     "bg-pink-100 text-pink-700",
-    subBorder:  "border-pink-100",
-  },
 ];
 
 function locationColorIndex(id: string): number {
@@ -167,11 +107,16 @@ function locationInitials(name: string): string {
 
 // ─── Data types ──────────────────────────────────────────────────────────────
 
-// Child Site – has all detailed fields
+export type ManagerHistoryEntry = {
+  managerName: string;
+  changedAt: string;
+};
+
 type Site = {
   id: string;
   name: string;
   manager: string;
+  managerHistory: ManagerHistoryEntry[];
   region: string;
   seq: number;
   status: string;
@@ -182,19 +127,16 @@ type Site = {
   remarks: string;
 };
 
-// Parent Location – minimal fields, contains an array of Sites
 type Location = {
   id: string;
   name: string;
   status: string;
-  region: string;        // optional, but we keep for consistency
-  sites: Site[];         // child sites
+  region: string;
+  sites: Site[];
 };
 
 // ─── Data helpers (back‑end mapping) ──────────────────────────────────────
 
-// The backend still expects "siteName" for parent and "subLevels" for children.
-// We map parent -> Location, children -> Sites.
 function mapBackendLocation(location: any): Location {
   const sites = Array.isArray(location.subLevels) ? location.subLevels : [];
   return {
@@ -206,6 +148,7 @@ function mapBackendLocation(location: any): Location {
       id: s.id,
       name: s.name || "",
       manager: s.manager || "",
+      managerHistory: Array.isArray(s.managerHistory) ? s.managerHistory : [],
       region: s.region || "",
       seq: s.seq || 1,
       status: s.status || "Planning",
@@ -226,6 +169,7 @@ function locationPayload(location: Partial<Location>) {
     subLevels: location.sites?.map((s) => ({
       name: s.name,
       manager: s.manager,
+      managerHistory: s.managerHistory,
       region: s.region,
       seq: s.seq,
       status: s.status,
@@ -238,7 +182,7 @@ function locationPayload(location: Partial<Location>) {
   };
 }
 
-// ─── Sample seed data based on the screenshot (inverted) ────────────────────
+// ─── Sample seed data with historical records ────────────────────────────────
 
 const SEED_LOCATIONS: Location[] = [
   {
@@ -251,6 +195,10 @@ const SEED_LOCATIONS: Location[] = [
         id: "SITE-ADM-WH1",
         name: "Warehouse 1",
         manager: "Admin Manager",
+        managerHistory: [
+          { managerName: "K.D. Perera", changedAt: "2024-01-01" },
+          { managerName: "S. Jayasinghe", changedAt: "2025-03-14" }
+        ],
         region: "Colombo",
         seq: 1,
         status: "Active",
@@ -259,147 +207,9 @@ const SEED_LOCATIONS: Location[] = [
         address: "1, Warehouse Road, Colombo 01",
         startDate: "2024-01-01",
         remarks: "Main warehouse",
-      },
-      {
-        id: "SITE-ADM-WH2",
-        name: "Warehouse 2",
-        manager: "Admin Manager",
-        region: "Colombo",
-        seq: 2,
-        status: "Active",
-        client: "Government",
-        contactNumber: "0112345679",
-        address: "2, Warehouse Road, Colombo 02",
-        startDate: "2024-02-01",
-        remarks: "Secondary warehouse",
-      },
-      {
-        id: "SITE-ADM-WH3",
-        name: "Warehouse 3",
-        manager: "Admin Manager",
-        region: "Colombo",
-        seq: 3,
-        status: "Planning",
-        client: "Government",
-        contactNumber: "0112345680",
-        address: "3, Warehouse Road, Colombo 03",
-        startDate: "2024-03-01",
-        remarks: "Future warehouse",
-      },
-      {
-        id: "SITE-ADM-RS1",
-        name: "Repair Shop 1",
-        manager: "Repair Supervisor",
-        region: "Colombo",
-        seq: 4,
-        status: "Active",
-        client: "Govt Workshop",
-        contactNumber: "0112345681",
-        address: "1, Repair Lane, Colombo 04",
-        startDate: "2024-01-15",
-        remarks: "Main repair",
-      },
-      {
-        id: "SITE-ADM-RS2",
-        name: "Repair Shop 2",
-        manager: "Repair Supervisor",
-        region: "Colombo",
-        seq: 5,
-        status: "Active",
-        client: "Govt Workshop",
-        contactNumber: "0112345682",
-        address: "2, Repair Lane, Colombo 05",
-        startDate: "2024-01-15",
-        remarks: "Secondary repair",
-      },
-      {
-        id: "SITE-ADM-RS3",
-        name: "Repair Shop 3",
-        manager: "Repair Supervisor",
-        region: "Colombo",
-        seq: 6,
-        status: "On Hold",
-        client: "Govt Workshop",
-        contactNumber: "0112345683",
-        address: "3, Repair Lane, Colombo 06",
-        startDate: "2024-02-15",
-        remarks: "On hold",
-      },
-      {
-        id: "SITE-ADM-TS1",
-        name: "Trash Site 1",
-        manager: "Waste Manager",
-        region: "Colombo",
-        seq: 7,
-        status: "Active",
-        client: "Waste Management",
-        contactNumber: "0112345684",
-        address: "1, Trash Road, Colombo 07",
-        startDate: "2024-01-20",
-        remarks: "Landfill",
-      },
-      {
-        id: "SITE-ADM-TS2",
-        name: "Trash Site 2",
-        manager: "Waste Manager",
-        region: "Colombo",
-        seq: 8,
-        status: "Active",
-        client: "Waste Management",
-        contactNumber: "0112345685",
-        address: "2, Trash Road, Colombo 08",
-        startDate: "2024-02-20",
-        remarks: "Recycling",
-      },
-      {
-        id: "SITE-ADM-TS3",
-        name: "Trash Site 3",
-        manager: "Waste Manager",
-        region: "Colombo",
-        seq: 9,
-        status: "Completed",
-        client: "Waste Management",
-        contactNumber: "0112345686",
-        address: "3, Trash Road, Colombo 09",
-        startDate: "2023-12-01",
-        remarks: "Closed",
-      },
+      }
     ],
-  },
-  {
-    id: "LOC-OP-0001",
-    name: "Operational Sites",
-    status: "Active",
-    region: "Colombo",
-    sites: [
-      {
-        id: "SITE-OP-COL",
-        name: "Colombo City Tower",
-        manager: "Anil Perera",
-        region: "Colombo",
-        seq: 1,
-        status: "Active",
-        client: "Ceylon Constructions Ltd",
-        contactNumber: "0112345678",
-        address: "25, Lotus Road, Colombo 01",
-        startDate: "2024-01-15",
-        remarks: "45 floors",
-      },
-      {
-        id: "SITE-OP-NBO",
-        name: "Nairobi Business Park",
-        manager: "John Mwangi",
-        region: "NBO",
-        seq: 2,
-        status: "Planning",
-        client: "EastAfrica Realty",
-        contactNumber: "0700123456",
-        address: "Upper Hill, Nairobi",
-        startDate: "2024-06-01",
-        remarks: "Phase 1",
-      },
-    ],
-  },
+  }
 ];
 
 // ─── Shared modals ────────────────────────────────────────────────────────────
@@ -432,12 +242,13 @@ function ConfirmModal({ name, onClose, onConfirm }: any) {
   );
 }
 
-// ─── Site (child) Modal – full details ──────────────────────────────────────
+// ─── Site Modal – Tracks Manager Mutations ───────────────────────────────────
 
 function SiteModal({ title, initial, onClose, onSave }: any) {
   const [form, setForm] = useState(initial || {
     name: "",
     manager: "",
+    managerHistory: [],
     region: REGIONS[0],
     client: "",
     contactNumber: "",
@@ -462,6 +273,23 @@ function SiteModal({ title, initial, onClose, onSave }: any) {
 
   const isValid = form.name.trim() && form.manager.trim() && form.client.trim() && /^\d{10}$/.test(form.contactNumber);
 
+  const handlePreSave = () => {
+    if (!isValid) return;
+
+    let updatedHistory = [...form.managerHistory];
+    
+    // Check if the manager changed to log previous manager into deployment history
+    if (initial && initial.manager && initial.manager !== form.manager) {
+      const historyEntry: ManagerHistoryEntry = {
+        managerName: initial.manager,
+        changedAt: new Date().toISOString().slice(0, 10)
+      };
+      updatedHistory = [historyEntry, ...updatedHistory];
+    }
+
+    onSave({ ...form, managerHistory: updatedHistory });
+  };
+
   return (
     <Modal title={title} onClose={onClose}>
       <div className="space-y-4">
@@ -471,7 +299,15 @@ function SiteModal({ title, initial, onClose, onSave }: any) {
           <div><label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Status</label><select value={form.status} onChange={(e) => handleChange("status", e.target.value)} className="w-full border rounded-xl px-4 py-2.5 text-sm">{Object.keys(STATUS_STYLES).map(s => <option key={s}>{s}</option>)}</select></div>
         </div>
         <div><label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Client *</label><input value={form.client} onChange={(e) => handleChange("client", e.target.value)} className="w-full border rounded-xl px-4 py-2.5 text-sm" /></div>
-        <div><label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Site Manager *</label><input value={form.manager} onChange={(e) => handleChange("manager", e.target.value)} className="w-full border rounded-xl px-4 py-2.5 text-sm" /></div>
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Site Manager *</label>
+          <input value={form.manager} onChange={(e) => handleChange("manager", e.target.value)} className="w-full border rounded-xl px-4 py-2.5 text-sm" placeholder="Assign primary manager" />
+          {initial?.manager && initial.manager !== form.manager && (
+            <p className="mt-1 text-xs text-amber-600 flex items-center gap-1">
+              <AlertCircle size={12} /> Changed manager. "{initial.manager}" will be archived to log history.
+            </p>
+          )}
+        </div>
         <div>
           <label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Contact Number</label>
           <input
@@ -489,7 +325,7 @@ function SiteModal({ title, initial, onClose, onSave }: any) {
       <div className="flex justify-end gap-3 mt-6 pt-2">
         <button onClick={onClose} className="btn">Cancel</button>
         <button
-          onClick={() => { setTouched((p) => ({ ...p, contactNumber: true })); if (isValid) onSave(form); }}
+          onClick={() => { setTouched((p) => ({ ...p, contactNumber: true })); handlePreSave(); }}
           disabled={!isValid}
           className={`btn btn-primary ${!isValid ? "opacity-50 cursor-not-allowed" : ""}`}
         >{title.includes("Edit") ? "Save Changes" : "Add Site"}</button>
@@ -498,7 +334,7 @@ function SiteModal({ title, initial, onClose, onSave }: any) {
   );
 }
 
-// ─── Location (parent) Modal – minimal ─────────────────────────────────────
+// ─── Location Form Modal ─────────────────────────────────────────────────────
 
 function LocationFormModal({ onClose, onSave, initial, isEdit = false }: any) {
   const [form, setForm] = useState(initial || {
@@ -530,26 +366,39 @@ function LocationFormModal({ onClose, onSave, initial, isEdit = false }: any) {
   );
 }
 
-// ─── Location Detail Panel (shows child Sites with full details) ────────────
+// ─── Location Detail Panel (Renders Child Logs & History Accordions) ──────────
 
 function LocationDetailPanel({ location, onUpdate, onClose }: any) {
   const color = getLocationColor(location.id);
   const [modal, setModal] = useState<
     { type: "add" } | { type: "edit"; site: Site } | { type: "delete"; site: Site } | null
   >(null);
+  
+  // Track open state for individual site histories in layout
+  const [expandedHistories, setExpandedHistories] = useState<Record<string, boolean>>({});
+
+  const toggleHistory = (siteId: string) => {
+    setExpandedHistories(prev => ({ ...prev, [siteId]: !prev[siteId] }));
+  };
 
   const updateLocation = (patch: Partial<Location>) => onUpdate({ ...location, ...patch });
 
   const handleAddSite = async (data: any) => {
-    const newSite = { id: `${location.id}-SITE-${pad(location.sites.length + 1, 2)}`, ...data };
+    const newSite = { 
+      id: `${location.id}-SITE-${pad(location.sites.length + 1, 2)}`, 
+      ...data,
+      managerHistory: [] 
+    };
     await updateLocation({ sites: [...location.sites, newSite] });
     setModal(null);
   };
+  
   const handleEditSite = async (data: any) => {
     if (modal?.type !== "edit") return;
     await updateLocation({ sites: location.sites.map((s: Site) => s.id === modal.site.id ? { ...s, ...data } : s) });
     setModal(null);
   };
+  
   const handleDeleteSite = async () => {
     if (modal?.type !== "delete") return;
     await updateLocation({ sites: location.sites.filter((s: Site) => s.id !== modal.site.id) });
@@ -558,7 +407,6 @@ function LocationDetailPanel({ location, onUpdate, onClose }: any) {
 
   return (
     <div className={`bg-white rounded-2xl border ${color.border} shadow-sm h-full flex flex-col overflow-hidden`}>
-      {/* Colored header for Location */}
       <div className={`px-6 py-5 border-b ${color.headerBorder} ${color.headerBg} flex justify-between items-start`}>
         <div className="flex items-start gap-4">
           <div className={`w-12 h-12 rounded-xl ${color.avatarBg} ${color.avatarText} flex items-center justify-center text-lg font-black shadow-sm flex-shrink-0`}>
@@ -576,7 +424,6 @@ function LocationDetailPanel({ location, onUpdate, onClose }: any) {
         <button onClick={onClose} className="p-1 rounded-lg hover:bg-white/70 text-slate-400"><X size={18} /></button>
       </div>
 
-      {/* Child Sites with full details */}
       <div className="flex-1 p-6 flex flex-col overflow-hidden">
         <div className="flex justify-between items-center mb-4">
           <h3 className="font-semibold text-slate-800 flex items-center gap-2">
@@ -592,36 +439,72 @@ function LocationDetailPanel({ location, onUpdate, onClose }: any) {
           </div>
         ) : (
           <div className="space-y-4 overflow-auto pr-1">
-            {location.sites.map((site: Site) => (
-              <div key={site.id} className={`border ${color.subBorder} rounded-xl p-4 hover:shadow-sm transition-all group ${color.cardBg}`}>
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className={`font-mono text-[10px] ${color.accent} font-semibold`}>{site.id}</span>
-                      <Badge variant={STATUS_STYLES[site.status] as any}>{site.status}</Badge>
+            {location.sites.map((site: Site) => {
+              const isHistoryOpen = !!expandedHistories[site.id];
+              return (
+                <div key={site.id} className={`border ${color.subBorder} rounded-xl p-4 hover:shadow-sm transition-all group ${color.cardBg}`}>
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`font-mono text-[10px] ${color.accent} font-semibold`}>{site.id}</span>
+                        <Badge variant={STATUS_STYLES[site.status] as any}>{site.status}</Badge>
+                      </div>
+                      <h4 className="font-semibold text-slate-800 mt-0.5">{site.name}</h4>
+                      
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-1 mt-2 text-sm text-slate-600">
+                        <div className="flex items-center gap-1.5 col-span-1">
+                          <div><span className="font-medium">Manager:</span> {site.manager}</div>
+                          {site.managerHistory && site.managerHistory.length > 0 && (
+                            <button 
+                              type="button"
+                              onClick={() => toggleHistory(site.id)}
+                              className="inline-flex items-center text-xs text-slate-400 hover:text-indigo-600 ml-1 bg-white border border-slate-200 shadow-sm rounded px-1 py-0.5 transition"
+                              title="View History Log"
+                            >
+                              <History size={11} className="mr-0.5" />
+                              {site.managerHistory.length}
+                            </button>
+                          )}
+                        </div>
+                        <div><span className="font-medium">Client:</span> {site.client}</div>
+                        <div><span className="font-medium">Contact:</span> {site.contactNumber}</div>
+                        <div><span className="font-medium">Start Date:</span> {site.startDate}</div>
+                        <div className="col-span-2"><span className="font-medium">Address:</span> {site.address || "—"}</div>
+                        {site.remarks && <div className="col-span-2"><span className="font-medium">Remarks:</span> {site.remarks}</div>}
+                      </div>
+
+                      {/* Expanded Section for History Timeline */}
+                      {isHistoryOpen && site.managerHistory && site.managerHistory.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-dashed border-slate-200 bg-white/70 p-2.5 rounded-lg">
+                          <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                            <Clock size={12} /> Previous Manager History
+                          </div>
+                          <div className="relative border-l border-slate-200 pl-3 ml-1.5 space-y-2">
+                            {site.managerHistory.map((entry, idx) => (
+                              <div key={idx} className="relative text-xs text-slate-600">
+                                <div className="absolute -left-[16.5px] top-1 w-2 h-2 rounded-full bg-slate-300 ring-4 ring-white" />
+                                <span className="font-semibold text-slate-700">{entry.managerName}</span>
+                                <span className="text-slate-400 mx-1.5">•</span>
+                                <span className="text-slate-400 font-mono">{entry.changedAt}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <h4 className="font-semibold text-slate-800 mt-0.5">{site.name}</h4>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 mt-2 text-sm text-slate-600">
-                      <div><span className="font-medium">Manager:</span> {site.manager}</div>
-                      <div><span className="font-medium">Client:</span> {site.client}</div>
-                      <div><span className="font-medium">Contact:</span> {site.contactNumber}</div>
-                      <div><span className="font-medium">Start Date:</span> {site.startDate}</div>
-                      <div className="col-span-2"><span className="font-medium">Address:</span> {site.address || "—"}</div>
-                      {site.remarks && <div className="col-span-2"><span className="font-medium">Remarks:</span> {site.remarks}</div>}
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition flex-shrink-0 ml-2">
+                      <button onClick={() => setModal({ type: "edit", site })} className="p-1.5 rounded-lg hover:bg-white text-slate-500"><Edit2 size={14} /></button>
+                      <button onClick={() => setModal({ type: "delete", site })} className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-500"><Trash2 size={14} /></button>
                     </div>
-                  </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition flex-shrink-0 ml-2">
-                    <button onClick={() => setModal({ type: "edit", site })} className="p-1.5 rounded-lg hover:bg-white text-slate-500"><Edit2 size={14} /></button>
-                    <button onClick={() => setModal({ type: "delete", site })} className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-500"><Trash2 size={14} /></button>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
-      {modal?.type === "add" && <SiteModal title="Add Site" initial={{ name: "", manager: "", region: REGIONS[0], client: "", contactNumber: "", address: "", startDate: new Date().toISOString().slice(0, 10), status: "Planning", remarks: "" }} onClose={() => setModal(null)} onSave={handleAddSite} />}
+      {modal?.type === "add" && <SiteModal title="Add Site" initial={{ name: "", manager: "", managerHistory: [], region: REGIONS[0], client: "", contactNumber: "", address: "", startDate: new Date().toISOString().slice(0, 10), status: "Planning", remarks: "" }} onClose={() => setModal(null)} onSave={handleAddSite} />}
       {modal?.type === "edit" && <SiteModal title="Edit Site" initial={modal.site} onClose={() => setModal(null)} onSave={handleEditSite} />}
       {modal?.type === "delete" && <ConfirmModal name={modal.site.name} onClose={() => setModal(null)} onConfirm={handleDeleteSite} />}
     </div>
