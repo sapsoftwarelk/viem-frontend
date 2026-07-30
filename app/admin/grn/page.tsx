@@ -562,9 +562,9 @@ function GRNLineRow({ line, index, onUpdate, onRemove, isEditing }: any) {
 // GRN FORM — WITH DROPDOWNS FOR SITE, RECEIVED BY, INSPECTED BY
 // ─────────────────────────────────────────────────────────────────────────────
 
-function GRNForm({ initial, onSubmit, onCancel, pos, linkedPO: initialLinkedPO, persons, sites }: {
+function GRNForm({ initial, onSubmit, onCancel, pos, linkedPO: initialLinkedPO, persons, suppliers, sites }: {
   initial?: any; onSubmit: (data: any) => void; onCancel: () => void;
-  pos: any[]; linkedPO?: any; persons: any[]; sites: any[];
+  pos: any[]; linkedPO?: any; persons: any[]; suppliers: any[]; sites: any[];
 }) {
   const [linkedPO, setLinkedPO] = useState<any>(initialLinkedPO || null);
   const [showPOPicker, setShowPOPicker] = useState(false);
@@ -572,6 +572,7 @@ function GRNForm({ initial, onSubmit, onCancel, pos, linkedPO: initialLinkedPO, 
   // Get active persons only
   const activePersons = persons.filter((p: any) => p.status === "active");
   const activeSites = sites.filter((s: any) => s.status === "Active" || s.status === "Planning");
+  const activeSuppliers = suppliers.filter((s: any) => s.status === "Active" || !s.status);
 
   const defaultGRN = {
     grnNumber: nextGRNNumber(), status: "Draft",
@@ -675,13 +676,13 @@ function GRNForm({ initial, onSubmit, onCancel, pos, linkedPO: initialLinkedPO, 
 
   // Handle person selection with ID tracking
   const handleReceivedByChange = (personName: string) => {
-    const person = persons.find((p: any) => p.name === personName);
+    const person = persons.find((p: any) => p.name === personName || p.fullName === personName);
     set("receivedBy", personName);
     set("receivedById", person ? person.id : "");
   };
 
   const handleInspectedByChange = (personName: string) => {
-    const person = persons.find((p: any) => p.name === personName);
+    const person = persons.find((p: any) => p.name === personName || p.fullName === personName);
     set("inspectedBy", personName);
     set("inspectedById", person ? person.id : "");
   };
@@ -739,7 +740,12 @@ function GRNForm({ initial, onSubmit, onCancel, pos, linkedPO: initialLinkedPO, 
         </div>
         <div className="col-span-2">
           <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5 tracking-wider">Supplier / Vendor</label>
-          <input value={form.supplier} onChange={(e) => set("supplier", e.target.value)} placeholder="Supplier or vendor name" className={inputCls} />
+          <select value={form.supplier} onChange={(e) => set("supplier", e.target.value)} className={inputCls}>
+            <option value="">Select a supplier…</option>
+            {activeSuppliers.map((sup: any) => (
+              <option key={sup.id} value={sup.name}>{sup.name}{sup.code ? ` (${sup.code})` : ""}</option>
+            ))}
+          </select>
         </div>
         
         {/* Delivery Site — DROPDOWN */}
@@ -1225,7 +1231,8 @@ function ConfirmDelete({ open, onClose, onConfirm, name }: any) {
 export default function GoodsReceivedNotePage() {
   const [grns, setGrns]             = useState<any[]>([]);
   const [pos, setPos]               = useState<any[]>([]);
-  const [persons]                   = useState(SEED_PERSONS); // TODO: wire to a real /persons or /employees endpoint
+  const [persons, setPersons]       = useState<any[]>(SEED_PERSONS); // TODO: wire to a real /persons or /employees endpoint
+  const [suppliers, setSuppliers]   = useState<any[]>([]);
   const [sites, setSites]           = useState(SEED_SITES);   // seeded fallback; replaced by real /site-locations on load
   const [loading, setLoading]       = useState(true);
   const [loadError, setLoadError]   = useState<string | null>(null);
@@ -1241,15 +1248,29 @@ export default function GoodsReceivedNotePage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [grnData, poData, siteData] = await Promise.all([
+      const [grnData, poData, siteData, supplierData, employeeData] = await Promise.all([
         grnApi.list(),
         poApi.list(),
         apiFetch("/site-locations").catch(() => null),
+        apiFetch("/suppliers").catch(() => null),
+        apiFetch("/employees").catch(() => null),
       ]);
       setGrns(grnData);
       setPos(Array.isArray(poData) ? poData.map(mapPurchaseOrderForGRN) : poData);
       if (Array.isArray(siteData)) {
         setSites(mapSiteLocationsFromApi(siteData));
+      }
+      if (Array.isArray(supplierData)) {
+        setSuppliers(supplierData);
+      }
+      if (Array.isArray(employeeData)) {
+        setPersons(employeeData);
+      }
+      if (Array.isArray(supplierData)) {
+        setSuppliers(supplierData);
+      }
+      if (Array.isArray(employeeData)) {
+        setPersons(employeeData);
       }
     } catch (err: any) {
       setLoadError(err.message || "Failed to load data");
@@ -1510,10 +1531,10 @@ export default function GoodsReceivedNotePage() {
       {/* Create / Edit Modals */}
       <Modal open={modal === "create"} onClose={() => { setModal(null); setCreateLinkedPO(null); }} title="New Goods Received Note" width="max-w-3xl">
         <GRNForm onSubmit={create} onCancel={() => { setModal(null); setCreateLinkedPO(null); }}
-          pos={pos} linkedPO={createLinkedPO} persons={persons} sites={sites} />
+          pos={pos} linkedPO={createLinkedPO} persons={persons} suppliers={suppliers} sites={sites} />
       </Modal>
       <Modal open={modal === "edit"} onClose={() => setModal(null)} title="Edit Goods Received Note" width="max-w-3xl">
-        {target && <GRNForm initial={target} onSubmit={update} onCancel={() => setModal(null)} pos={pos} persons={persons} sites={sites} />}
+        {target && <GRNForm initial={target} onSubmit={update} onCancel={() => setModal(null)} pos={pos} persons={persons} suppliers={suppliers} sites={sites} />}
       </Modal>
 
       <ConfirmDelete open={modal === "delete"} onClose={() => setModal(null)} onConfirm={remove} name={target?.grnNumber} />

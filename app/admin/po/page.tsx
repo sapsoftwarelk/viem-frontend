@@ -720,9 +720,9 @@ function POLineRow({ line, index, onUpdate, onRemove, onOpenPicker, onGoRegister
 // PO FORM
 // ─────────────────────────────────────────────────────────────────────────────
 
-function POForm({ initial, onSubmit, onCancel, onGoRegister, registeredItems, siteLocations, suppliers, onNewItemRegistered }: {
+function POForm({ initial, onSubmit, onCancel, onGoRegister, registeredItems, siteLocations, suppliers, employees, onNewItemRegistered }: {
   initial?: any; onSubmit: (data: any) => void; onCancel: () => void;
-  onGoRegister: () => void; registeredItems: any[]; siteLocations: any[]; suppliers: any[]; onNewItemRegistered: (item: any) => void;
+  onGoRegister: () => void; registeredItems: any[]; siteLocations: any[]; suppliers: any[]; employees: any[]; onNewItemRegistered: (item: any) => void;
 }) {
   const defaultPO = {
     poNumber: nextPONumber(), status: "Draft", supplier: "", site: "", siteLocationId: "",
@@ -819,11 +819,21 @@ function POForm({ initial, onSubmit, onCancel, onGoRegister, registeredItems, si
         </div>
         <div>
           <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5 tracking-wider">Requested By</label>
-          <input value={form.requestedBy} onChange={(e) => set("requestedBy", e.target.value)} placeholder="Name" className={inputCls} />
+          <select value={form.requestedBy} onChange={(e) => set("requestedBy", e.target.value)} className={inputCls}>
+            <option value="">Select requester…</option>
+            {employees.filter((e: any) => e.status?.toLowerCase() !== "inactive").map((emp: any) => (
+              <option key={emp.id} value={emp.fullName || emp.name}>{emp.fullName || emp.name}</option>
+            ))}
+          </select>
         </div>
         <div>
           <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5 tracking-wider">Approved By</label>
-          <input value={form.approvedBy} onChange={(e) => set("approvedBy", e.target.value)} placeholder="Name" className={inputCls} />
+          <select value={form.approvedBy} onChange={(e) => set("approvedBy", e.target.value)} className={inputCls}>
+            <option value="">Select approver…</option>
+            {employees.filter((e: any) => e.status?.toLowerCase() !== "inactive").map((emp: any) => (
+              <option key={emp.id} value={emp.fullName || emp.name}>{emp.fullName || emp.name}</option>
+            ))}
+          </select>
         </div>
         <div>
           <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5 tracking-wider">Required By Date</label>
@@ -1317,6 +1327,7 @@ export default function PurchaseOrderPage() {
   const [registeredItems, setRegisteredItems] = useState(SEED_REGISTERED_ITEMS);
   const [siteLocations, setSiteLocations] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
   const [search, setSearch]         = useState("");
   const [filterStatus, setFilter]   = useState("all");
   const [modal, setModal]           = useState<string | null>(null);
@@ -1361,6 +1372,17 @@ export default function PurchaseOrderPage() {
       }
     };
 
+    const loadEmployees = async () => {
+      try {
+        const result = await apiFetch("/employees");
+        if (Array.isArray(result)) {
+          setEmployees(result);
+        }
+      } catch (error) {
+        console.warn("Unable to load employees", error);
+      }
+    };
+
     const loadItems = async () => {
       try {
         const result = await apiFetch("/items");
@@ -1376,6 +1398,7 @@ export default function PurchaseOrderPage() {
     loadSites();
     loadItems();
     loadSuppliers();
+    loadEmployees();
   }, []);
 
   const handleNewItemRegistered = (item: any) => {
@@ -1610,6 +1633,7 @@ export default function PurchaseOrderPage() {
           registeredItems={registeredItems}
           siteLocations={siteLocations}
           suppliers={suppliers}
+          employees={employees}
           onNewItemRegistered={handleNewItemRegistered} />
       </Modal>
       <Modal open={modal === "edit"} onClose={() => setModal(null)} title="Edit Purchase Order" width="max-w-3xl">
@@ -1618,6 +1642,7 @@ export default function PurchaseOrderPage() {
           registeredItems={registeredItems}
           siteLocations={siteLocations}
           suppliers={suppliers}
+          employees={employees}
           onNewItemRegistered={handleNewItemRegistered} />}
       </Modal>
 
