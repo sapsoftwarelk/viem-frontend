@@ -259,6 +259,7 @@ function mapPurchaseOrderForGRN(po: any) {
     id: poId,
     poNumber: poId,
     status: normalizePOStatusForGRN(po?.status),
+    supplierId: po?.supplierId || "",
     supplier: po?.supplier || "",
     site: po?.site || "",
     siteLocationId: po?.siteLocationId || "",
@@ -577,7 +578,7 @@ function GRNForm({ initial, onSubmit, onCancel, pos, linkedPO: initialLinkedPO, 
   const defaultGRN = {
     grnNumber: nextGRNNumber(), status: "Draft",
     poId: "", poNumber: "", linkedPO: false,
-    supplier: "", site: "", siteLocationId: "",
+    supplier: "", supplierId: "", site: "", siteLocationId: "",
     receivedBy: "", receivedById: "",
     inspectedBy: "", inspectedById: "",
     receivedDate: todayStr(), deliveryNote: "", notes: "",
@@ -592,6 +593,7 @@ function GRNForm({ initial, onSubmit, onCancel, pos, linkedPO: initialLinkedPO, 
         poId: initialLinkedPO.id,
         poNumber: initialLinkedPO.poNumber,
         linkedPO: true,
+        supplierId: initialLinkedPO.supplierId || "",
         supplier: initialLinkedPO.supplier || "",
         site: initialLinkedPO.site || "",
         siteLocationId: initialLinkedPO.siteLocationId || "",
@@ -627,6 +629,7 @@ function GRNForm({ initial, onSubmit, onCancel, pos, linkedPO: initialLinkedPO, 
       poId: po.id,
       poNumber: po.poNumber,
       linkedPO: true,
+      supplierId: po.supplierId || f.supplierId,
       supplier: po.supplier || f.supplier,
       site: po.site || f.site,
       siteLocationId: po.siteLocationId || f.siteLocationId,
@@ -743,10 +746,18 @@ function GRNForm({ initial, onSubmit, onCancel, pos, linkedPO: initialLinkedPO, 
         </div>
         <div className="col-span-2">
           <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5 tracking-wider">Supplier / Vendor</label>
-          <select value={form.supplier} onChange={(e) => set("supplier", e.target.value)} className={inputCls}>
+          <select
+            value={form.supplierId}
+            onChange={(e) => {
+              const supplierId = e.target.value;
+              const supplier = suppliers.find((item: any) => item.id === supplierId);
+              setForm((f: any) => ({ ...f, supplierId, supplier: supplier?.name || "" }));
+            }}
+            className={inputCls}
+          >
             <option value="">Select a supplier…</option>
             {activeSuppliers.map((sup: any) => (
-              <option key={sup.id} value={sup.name}>{sup.name}{sup.code ? ` (${sup.code})` : ""}</option>
+              <option key={sup.id} value={sup.id}>{sup.name}{sup.code ? ` (${sup.code})` : ""}</option>
             ))}
           </select>
         </div>
@@ -1294,8 +1305,31 @@ export default function GoodsReceivedNotePage() {
 
   const create = async (data: any) => {
     try {
-      const created = await grnApi.create(data);
-      setGrns((p) => [...p, created]);
+      const created = await grnApi.create({
+        docId: data.grnNumber,
+        poId: data.poId || null,
+        supplierId: data.supplierId || "",
+        siteLocationId: data.siteLocationId || null,
+        receivedBy: data.receivedBy || null,
+        inspectedBy: data.inspectedBy || null,
+        deliveryNote: data.deliveryNote || null,
+        notes: data.notes || null,
+        receivedDate: data.receivedDate || undefined,
+        items: (data.lines || []).map((line: any) => ({
+          poLineId: line.poLineId || null,
+          itemId: line.itemId || null,
+          itemName: line.itemName || "Item",
+          type: line.type || null,
+          categoryCode: line.categoryCode || null,
+          unit: line.unit || null,
+          qtyOrdered: Number(line.qtyOrdered || 0),
+          qtyReceived: Number(line.qtyReceived || 0),
+          unitPrice: Number(line.unitPrice || 0),
+          isRegistered: Boolean(line.isRegistered),
+          condition: line.condition || null,
+        })),
+      });
+      setGrns((p) => [...p, { ...data, id: created.docId || data.grnNumber }]);
       setModal(null);
       setCreateLinkedPO(null);
     } catch (err: any) {
