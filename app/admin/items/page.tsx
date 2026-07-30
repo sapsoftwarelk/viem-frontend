@@ -729,14 +729,23 @@ function ItemForm({ initial, onSubmit, onCancel, subCategories = [], suppliers =
     return Object.keys(nextErrors).length === 0;
   };
 
-  // When type changes, reset category to first of that type
+  // When type changes, reset category to first matching dynamic category for that type
   const handleTypeChange = (t: ItemType) => {
-    const cats = getCategoryList(t);
+    const cats = getCategoryList(t, subCategories);
     set("type", t);
     set("categoryCode", cats[0]?.code || "");
     set("meta", {});
     set("batchSplits", t === "Consumable" ? [{ id: uid(), quantity: form.quantity || 1, expiryDate: "" }] : []);
   };
+
+  useEffect(() => {
+    const cats = getCategoryList(form.type, subCategories);
+    if (cats.length === 0) return;
+    if (!cats.some((c) => c.code === form.categoryCode)) {
+      set("categoryCode", cats[0].code);
+      set("meta", {});
+    }
+  }, [form.type, subCategories]);
 
   const catList = getCategoryList(form.type, subCategories);
   const catObj  = getCategoryByCode(form.type, form.categoryCode, subCategories);
