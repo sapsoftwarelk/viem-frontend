@@ -1269,7 +1269,7 @@ export default function GoodsReceivedNotePage() {
         apiFetch("/suppliers").catch(() => null),
         apiFetch("/employees").catch(() => null),
       ]);
-      setGrns(grnData);
+      setGrns(Array.isArray(grnData) ? grnData.map(mapGoodsReceivedNoteFromApi) : []);
       setPos(Array.isArray(poData) ? poData.map(mapPurchaseOrderForGRN) : poData);
       if (Array.isArray(siteData)) {
         setSites(mapSiteLocationsFromApi(siteData));
@@ -1584,4 +1584,25 @@ function mapEmployeesFromApi(list: any[]) {
     phone: employee.contact ?? employee.phone ?? "",
     status: String(employee.status ?? "").toLowerCase(),
   }));
+}
+
+function mapGoodsReceivedNoteFromApi(grn: any) {
+  const lines = Array.isArray(grn?.lines) ? grn.lines : grn?.items || [];
+  return {
+    ...grn,
+    id: grn?.id || grn?.docId || "",
+    grnNumber: grn?.grnNumber || grn?.docId || "",
+    status: grn?.status || (grn?.document?.status === "PENDING" ? "Pending Review" : "Draft"),
+    supplier: typeof grn?.supplier === "string" ? grn.supplier : grn?.supplier?.name || "",
+    site: grn?.site || grn?.siteLocation?.siteName || "",
+    poNumber: grn?.poNumber || grn?.poId || "",
+    linkedPO: grn?.linkedPO ?? Boolean(grn?.poId),
+    lines: lines.map((line: any) => ({
+      ...line,
+      itemName: line?.itemName || line?.description || "",
+      qtyOrdered: Number(line?.qtyOrdered ?? line?.quantity ?? 0),
+      qtyReceived: Number(line?.qtyReceived ?? 0),
+      unitPrice: Number(line?.unitPrice ?? 0),
+    })),
+  };
 }
