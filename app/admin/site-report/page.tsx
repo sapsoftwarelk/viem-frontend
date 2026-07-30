@@ -171,157 +171,6 @@ interface InventoryItem {
 // SEED DATA
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SITES: Site[] = [
-  {
-    id: "site1", code: "SITE-COL-0001", name: "Colombo City Tower",
-    location: "Colombo 01", manager: "Anil Perera", technicalOfficer: "Kamala Wijesinghe",
-    supervisor: "Ruwantha Bandara", status: "Active",
-    startDate: "2024-01-15", expectedEndDate: "2026-12-31",
-    address: "25, Lotus Road, Colombo 01", client: "Ceylon Constructions Ltd",
-    subLevels: ["Block A Level 1", "Block A Level 2", "Block B Ground", "Parking Level"]
-  },
-  {
-    id: "site2", code: "SITE-NBO-0001", name: "Nairobi Business Park",
-    location: "Nairobi, Kenya", manager: "John Mwangi", technicalOfficer: "Sarah Kimani",
-    supervisor: "James Otieno", status: "Active",
-    startDate: "2024-06-01", expectedEndDate: "2025-12-31",
-    address: "Upper Hill, Nairobi", client: "EastAfrica Realty",
-    subLevels: ["Phase 1 Ground", "Phase 1 Mezzanine", "Phase 2 Foundation"]
-  },
-  {
-    id: "site3", code: "SITE-KDY-0001", name: "Kandy Hills Resort",
-    location: "Kandy", manager: "Nalini Fernando", technicalOfficer: "Suresh Mendis",
-    supervisor: "Dilani Rathnayake", status: "Active",
-    startDate: "2025-01-10", expectedEndDate: "2026-06-30",
-    address: "Peradeniya Road, Kandy", client: "Hilltop Hotels",
-    subLevels: ["Main Building Ground", "Main Building First", "Pool Area", "Landscaping"]
-  },
-];
-
-const EMPLOYEES = [
-  { id: "emp1", name: "Anil Perera", role: "Site Manager", phone: "+94 77 123 4567" },
-  { id: "emp2", name: "Kamala Wijesinghe", role: "Technical Officer", phone: "+94 77 234 5678" },
-  { id: "emp3", name: "Ruwantha Bandara", role: "Supervisor", phone: "+94 76 345 6789" },
-  { id: "emp9", name: "John Mwangi", role: "Site Manager", phone: "+254 700 123 456" },
-  { id: "emp10", name: "Sarah Kimani", role: "Technical Officer", phone: "+254 700 234 567" },
-  { id: "emp11", name: "James Otieno", role: "Supervisor", phone: "+254 700 345 678" },
-  { id: "emp4", name: "Nalini Fernando", role: "Site Manager", phone: "+94 71 456 7890" },
-  { id: "emp5", name: "Suresh Mendis", role: "Technical Officer", phone: "+94 70 567 8901" },
-  { id: "emp6", name: "Dilani Rathnayake", role: "Supervisor", phone: "+94 77 678 9012" },
-  { id: "emp7", name: "Kasun Perera", role: "Driver", phone: "+94 75 789 0123" },
-];
-
-const VEHICLES = [
-  { id: "veh1", plate: "LRY-001", type: "Lorry", driver: "Kasun Perera", status: "Available" },
-];
-
-const INVENTORY_ITEMS: InventoryItem[] = [
-  { id: "item1", name: "OPC Cement 50kg", type: "Consumable", unit: "Bags", quantity: 500, siteStock: { site1: 250, site2: 100, site3: 50 } },
-  { id: "item2", name: "T12 Rebar", type: "Consumable", unit: "kg", quantity: 5000, siteStock: { site1: 1200, site2: 800, site3: 400 } },
-  { id: "item3", name: "Scaffolding Frame", type: "Reusable", unit: "frames", quantity: 150, siteStock: { site1: 45, site2: 30, site3: 20 } },
-  { id: "item4", name: "Angle Grinder", type: "Tool", unit: "pcs", quantity: 10, siteStock: { site1: 4, site2: 2, site3: 1 } },
-];
-
-// Seed return notes
-const SEED_RETURNS: SiteReturnNote[] = [
-  {
-    id: "ret1",
-    returnNumber: "SRTN-2026-0001",
-    siteId: "site1",
-    siteName: "Colombo City Tower",
-    subLevel: "Block A Level 1",
-    destinationType: "WAREHOUSE",
-    destinationId: "wh1",
-    destinationName: "Central Warehouse",
-    items: [
-      { id: "ri1", itemId: "item1", itemName: "OPC Cement 50kg", unit: "Bags", availableStock: 250, returnedQuantity: 20, reason: "Excess stock", condition: "Good" },
-      { id: "ri2", itemId: "item3", itemName: "Scaffolding Frame", unit: "frames", availableStock: 45, returnedQuantity: 5, reason: "Work completed", condition: "Good" },
-    ],
-    status: "COMPLETED",
-    requestDate: "2026-05-22",
-    requestedBy: "Anil Perera",
-    approvedBy: "Kamala Wijesinghe",
-    dispatchDate: "2026-05-23",
-    receivedDate: "2026-05-24",
-    vehicleId: "veh1",
-    driverId: "emp7",
-    notes: "Return excess cement and unused scaffolding",
-    createdAt: "2026-05-22T08:00:00Z",
-    updatedAt: "2026-05-24T14:00:00Z",
-  },
-  {
-    id: "ret2",
-    returnNumber: "SRTN-2026-0002",
-    siteId: "site2",
-    siteName: "Nairobi Business Park",
-    subLevel: "Phase 1 Ground",
-    destinationType: "SUPPLIER",
-    destinationId: "sup2",
-    destinationName: "SteelMart International",
-    items: [
-      { id: "ri3", itemId: "item2", itemName: "T12 Rebar", unit: "kg", availableStock: 800, returnedQuantity: 500, reason: "Wrong grade supplied", condition: "Wrong Item" },
-    ],
-    status: "IN_TRANSIT",
-    requestDate: "2026-05-20",
-    requestedBy: "John Mwangi",
-    approvedBy: "Sarah Kimani",
-    dispatchDate: "2026-05-21",
-    notes: "Return incorrect rebar grade",
-    createdAt: "2026-05-20T09:00:00Z",
-    updatedAt: "2026-05-21T14:00:00Z",
-  },
-];
-
-const SITE_TASKS: Record<string, SiteTask[]> = {
-  site1: [
-    {
-      id: "task1", taskId: "TASK-2026-0001", jobName: "Foundation Concrete Pour",
-      description: "Pour concrete for foundation of Block A.", priority: "HIGH", status: "MATERIAL_SENT",
-      taskType: "CONCRETE_POUR", startDate: "2026-05-20", dueDate: "2026-05-25",
-      assignedSiteManagerId: "emp1", assignedTechnicalOfficerId: "emp2", assignedSupervisorId: "emp3", assignedDriverId: "emp7",
-      assignedVehicles: [
-        { id: "va1", vehicleId: "veh1", vehiclePlate: "LRY-001", driver: "Kasun Perera", tripType: "MORNING", status: "IN_TRANSIT", departureTime: "2026-05-20T08:00:00", subLevel: "Block A Level 1" }
-      ],
-      transferNotes: [
-        {
-          id: "tn1", transferId: "TRF-2026-0001", fromType: "WAREHOUSE", fromId: "warehouse1", fromName: "Central Warehouse",
-          toSiteId: "site1", toSubLevel: "Block A Level 1",
-          items: [
-            { id: "ti1", itemId: "item1", itemName: "OPC Cement 50kg", unit: "Bags", requestedQuantity: 200, issuedQuantity: 200, receivedQuantity: 180, availableStock: 500 },
-            { id: "ti2", itemId: "item2", itemName: "T12 Rebar", unit: "kg", requestedQuantity: 2000, issuedQuantity: 2000, receivedQuantity: 2000, availableStock: 5000 }
-          ],
-          status: "IN_TRANSIT", requestedDate: "2026-05-18", requestedBy: "Anil Perera", approvedBy: "Kamala Wijesinghe",
-          dispatchedDate: "2026-05-19", driverId: "emp7", vehicleId: "veh1", notes: "Priority delivery"
-        }
-      ],
-      returnNotes: SEED_RETURNS.filter(r => r.siteId === "site1"),   // site1 returns
-      dailyLogs: [
-        { id: "dl1", date: "2026-05-20", workforceCount: 12, contractors: 4, supervisors: 2, materialsUsed: "100 bags cement, 1000kg rebar", equipmentHours: "Mixer: 4h", events: "Rain delay", photos: [], notes: "", subLevel: "Block A Level 1" }
-      ],
-      createdAt: "2026-05-18T10:00:00Z", updatedAt: "2026-05-20T08:00:00Z", notes: "", subLevel: "Block A Level 1"
-    },
-    {
-      id: "task2", taskId: "TASK-2026-0003", jobName: "Block A Level 2 Masonry",
-      description: "Brickwork for Block A Level 2.", priority: "MEDIUM", status: "IN_PROGRESS",
-      taskType: "MASONRY", startDate: "2026-05-22", dueDate: "2026-05-30",
-      assignedSiteManagerId: "emp1", assignedTechnicalOfficerId: "emp2", assignedSupervisorId: "emp3",
-      assignedVehicles: [], transferNotes: [], returnNotes: [], dailyLogs: [],
-      createdAt: "2026-05-21T09:00:00Z", updatedAt: "2026-05-22T07:30:00Z", notes: "", subLevel: "Block A Level 2"
-    }
-  ],
-  site2: [
-    {
-      id: "task3", taskId: "TASK-2026-0002", jobName: "Excavation for Foundation",
-      description: "Excavate area for building foundation.", priority: "MEDIUM", status: "IN_PROGRESS",
-      taskType: "EXCAVATION", startDate: "2026-05-22", dueDate: "2026-05-28",
-      assignedSiteManagerId: "emp9", assignedTechnicalOfficerId: "emp10", assignedSupervisorId: "emp11",
-      assignedVehicles: [], transferNotes: [], returnNotes: SEED_RETURNS.filter(r => r.siteId === "site2"), dailyLogs: [],
-      createdAt: "2026-05-19T09:00:00Z", updatedAt: "2026-05-22T07:30:00Z", notes: "", subLevel: "Phase 1 Ground"
-    }
-  ],
-  site3: [],
-};
-
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -333,8 +182,7 @@ function formatDate(d: string) {
 
 function getPersonName(id: string | undefined) {
   if (!id) return "—";
-  const p = EMPLOYEES.find(e => e.id === id);
-  return p ? p.name : id;
+  return id;
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -378,13 +226,15 @@ export default function SiteReportPage() {
   const [returnNotes, setReturnNotes] = useState<SiteReturnNote[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [selectedSiteId, setSelectedSiteId] = useState<string>("");
-  const [dateFrom, setDateFrom] = useState<string>("2026-05-01");
-  const [dateTo, setDateTo] = useState<string>("2026-05-31");
+  const [dateFrom, setDateFrom] = useState<string>(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10));
+  const [dateTo, setDateTo] = useState<string>(new Date().toISOString().slice(0, 10));
   const [apiError, setApiError] = useState("");
+  const [loading, setLoading] = useState(true);
   const reportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const loadData = async () => {
+      setLoading(true);
       try {
         setApiError("");
         const [sitesData, tasksData, transfersData, returnsData, itemsData] = await Promise.all([
@@ -414,12 +264,15 @@ export default function SiteReportPage() {
         setReturnNotes(Array.isArray(returnsData) ? returnsData.map((item) => normalizeReturn(item, siteNameById)) : []);
         setInventoryItems(Array.isArray(itemsData) ? itemsData.map(normalizeSiteStock) : []);
       } catch (error: any) {
-        console.warn("Using seed site report data", error);
+        console.warn("Site report live load failed", error);
         setApiError(error?.message || "Unable to load live site report data.");
-        setSites(SITES);
-        setSiteTasks(SITE_TASKS);
-        setInventoryItems(INVENTORY_ITEMS);
-        setSelectedSiteId((current) => current || SITES[0]?.id || "");
+        setSites([]);
+        setSiteTasks({});
+        setTransferNotes([]);
+        setReturnNotes([]);
+        setInventoryItems([]);
+      } finally {
+        setLoading(false);
       }
     };
     loadData();
@@ -534,7 +387,7 @@ export default function SiteReportPage() {
     return (
       <div className="min-h-screen bg-[#f7f8fb] p-5 font-sans">
         <div className="max-w-7xl mx-auto bg-white rounded-2xl border border-slate-100 p-8 text-center text-slate-500">
-          {apiError ? `Live data unavailable: ${apiError}` : "Loading site report data..."}
+          {loading ? "Loading site report data..." : apiError ? `Live data unavailable: ${apiError}` : "No site data available."}
         </div>
       </div>
     );

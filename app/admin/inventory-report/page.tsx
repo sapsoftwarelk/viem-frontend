@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { apiFetch } from "@/lib/api";
 import {
   Plus, Search, Eye, Pencil, Trash2, X, AlertCircle,
   Package, ChevronDown, Hash, Calendar, Download, Filter,
@@ -69,157 +70,6 @@ const STOCK_STATUS = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SEED DATA — INVENTORY ITEMS
-// ─────────────────────────────────────────────────────────────────────────────
-
-const SEED_INVENTORY = [
-  {
-    id: "inv1",
-    itemId: "TOOL-CUT-0001",
-    name: "Angle Grinder 230mm",
-    type: "Tool",
-    categoryCode: "CUT",
-    quantity: 8,
-    unit: "pcs",
-    unitPrice: 85,
-    minStock: 3,
-    maxStock: 15,
-    location: "A-12",
-    status: "Active",
-    supplierId: "sup3",
-    supplierName: "Hardware Lanka (Pvt) Ltd",
-    lastReceived: "2026-05-10",
-    notes: "Heavy duty, 2200W",
-    attributes: { maxHours: "2000", serialNo: "AG230-001", bladeType: "230mm" },
-  },
-  {
-    id: "inv2",
-    itemId: "TOOL-DRL-0001",
-    name: "Rotary Hammer Drill",
-    type: "Tool",
-    categoryCode: "DRL",
-    quantity: 4,
-    unit: "pcs",
-    unitPrice: 120,
-    minStock: 2,
-    maxStock: 10,
-    location: "B-05",
-    status: "Active",
-    supplierId: "sup3",
-    supplierName: "Hardware Lanka (Pvt) Ltd",
-    lastReceived: "2026-04-22",
-    notes: "SDS Plus, 800W",
-    attributes: { maxHours: "1500", chuckSize: "13mm", serialNo: "RHD-882" },
-  },
-  {
-    id: "inv3",
-    itemId: "REUS-SCF-0001",
-    name: "Scaffolding Frame 1.8m",
-    type: "Reusable",
-    categoryCode: "SCF",
-    quantity: 45,
-    unit: "frames",
-    unitPrice: 15,
-    minStock: 20,
-    maxStock: 100,
-    location: "C-01",
-    status: "Active",
-    supplierId: "sup1",
-    supplierName: "Ceylon Construction Materials",
-    lastReceived: "2026-04-15",
-    notes: "Galvanized, standard duty",
-    attributes: {},
-  },
-  {
-    id: "inv4",
-    itemId: "REUS-PROP-0001",
-    name: "Acrow Prop 3m",
-    type: "Reusable",
-    categoryCode: "PROP",
-    quantity: 120,
-    unit: "props",
-    unitPrice: 25,
-    minStock: 50,
-    maxStock: 250,
-    location: "C-07",
-    status: "Active",
-    supplierId: "sup1",
-    supplierName: "Ceylon Construction Materials",
-    lastReceived: "2026-05-01",
-    notes: "Adjustable, 3m extended",
-    attributes: {},
-  },
-  {
-    id: "inv5",
-    itemId: "CONS-CEM-0001",
-    name: "OPC Cement 50kg",
-    type: "Consumable",
-    categoryCode: "CEM",
-    quantity: 250,
-    unit: "Bags",
-    unitPrice: 12,
-    minStock: 100,
-    maxStock: 1000,
-    location: "D-03",
-    status: "Active",
-    supplierId: "sup1",
-    supplierName: "Ceylon Construction Materials",
-    lastReceived: "2026-05-18",
-    notes: "Grade 42.5N",
-    attributes: {},
-  },
-  {
-    id: "inv6",
-    itemId: "CONS-RBR-0001",
-    name: "T12 Rebar",
-    type: "Consumable",
-    categoryCode: "RBR",
-    quantity: 3200,
-    unit: "kg",
-    unitPrice: 0.85,
-    minStock: 1000,
-    maxStock: 5000,
-    location: "E-02",
-    status: "Active",
-    supplierId: "sup2",
-    supplierName: "SteelMart International",
-    lastReceived: "2026-05-10",
-    notes: "Grade 60, 12mm dia",
-    attributes: {},
-  },
-  {
-    id: "inv7",
-    itemId: "CONS-CONC-0001",
-    name: "Ready-mix Concrete Grade 30",
-    type: "Consumable",
-    categoryCode: "CONC",
-    quantity: 0,
-    unit: "Cubic metres",
-    unitPrice: 95,
-    minStock: 5,
-    maxStock: 30,
-    location: "E-09",
-    status: "Inactive",
-    supplierId: "sup1",
-    supplierName: "Ceylon Construction Materials",
-    lastReceived: "2026-04-10",
-    notes: "For structural slabs",
-    attributes: {},
-  },
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SEED SUPPLIERS (from previous page)
-// ─────────────────────────────────────────────────────────────────────────────
-
-const SEED_SUPPLIERS = [
-  { id: "sup1", code: "SUP-001", name: "Ceylon Construction Materials", status: "Active" },
-  { id: "sup2", code: "SUP-002", name: "SteelMart International", status: "Active" },
-  { id: "sup3", code: "SUP-003", name: "Hardware Lanka (Pvt) Ltd", status: "Active" },
-  { id: "sup4", code: "SUP-004", name: "Global Tools & Equipment", status: "Inactive" },
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -227,6 +77,47 @@ function uid() { return Math.random().toString(36).slice(2, 9); }
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 function formatDate(d: string) { return d ? new Date(d).toLocaleDateString("en-GB") : "—"; }
 function fmtNumber(n: number) { return n?.toLocaleString() || "0"; }
+
+function getItemTypeLabel(type: string) {
+  const normalized = String(type || "").toLowerCase();
+  if (normalized === "tool") return "Tool";
+  if (normalized === "reusable") return "Reusable";
+  return "Consumable";
+}
+
+function getInventoryLocation(item: any) {
+  return (
+    item?.location?.name ||
+    item?.location?.siteName ||
+    item?.location?.location ||
+    item?.locationId ||
+    item?.storageLocation ||
+    "Warehouse"
+  );
+}
+
+function normalizeInventoryItem(raw: any, supplierMap: Record<string, string>) {
+  const type = String(raw?.type || raw?.item?.type || "").toLowerCase();
+  const item = raw?.item || raw;
+  const supplierKey = item?.supplier;
+  return {
+    id: String(item?.id || raw?.id || uid()),
+    itemId: String(item?.id || raw?.id || ""),
+    name: String(item?.itemName || item?.name || item?.model || "Unnamed Item"),
+    type: getItemTypeLabel(type),
+    categoryCode: String(item?.subCategory?.code || item?.subCategoryCode || item?.categoryCode || ""),
+    quantity: Number(item?.quantity ?? item?.pieceNum ?? (type === "tool" ? 1 : 0)),
+    unit: String(item?.unit || (type === "tool" ? "pcs" : "pcs")),
+    minStock: Number(item?.minStock || 0),
+    maxStock: Number(item?.maxStock || 0),
+    location: getInventoryLocation(item),
+    status: String(item?.status || "Active"),
+    supplierName: supplierMap[String(supplierKey)] || String(supplierKey || item?.supplierName || ""),
+    lastReceived: String(item?.receivedDate || item?.purchaseDate || item?.createdAt || ""),
+    notes: String(item?.description || item?.notes || ""),
+    attributes: item?.attributes || {},
+  };
+}
 
 function generateItemId(type: string, categoryCode: string, existingItems: any[]) {
   const prefix = `${type.toUpperCase().slice(0, 4)}-${categoryCode}-`;
@@ -596,12 +487,38 @@ function ConfirmDeleteModal({ open, onClose, onConfirm, name }: any) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function WarehouseInventoryPage() {
-  const [items, setItems] = useState(SEED_INVENTORY);
-  const [suppliers] = useState(SEED_SUPPLIERS);
+  const [items, setItems] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterStockStatus, setFilterStockStatus] = useState("all");
+  const [apiError, setApiError] = useState("");
+
+  useEffect(() => {
+    const loadInventory = async () => {
+      try {
+        setApiError("");
+        const [itemsData, suppliersData] = await Promise.all([apiFetch("/items"), apiFetch("/suppliers")]);
+        const supplierMap: Record<string, string> = {};
+        if (Array.isArray(suppliersData)) {
+          suppliersData.forEach((sup: any) => {
+            if (sup?.id) supplierMap[String(sup.id)] = String(sup.name || sup.code || "");
+          });
+          setSuppliers(suppliersData);
+        }
+
+        if (Array.isArray(itemsData)) {
+          setItems(itemsData.map((entry: any) => normalizeInventoryItem(entry, supplierMap)));
+        }
+      } catch (error: any) {
+        console.warn("Warehouse inventory live load failed", error);
+        setApiError(error?.message || "Unable to load inventory from backend.");
+      }
+    };
+
+    loadInventory();
+  }, []);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { apiFetch } from "@/lib/api";
 import {
   Search, ChevronRight, Package, Truck, Undo2, MoveRight,
   ArrowRightLeft, Calendar, Filter, X, Eye, ChevronDown,
@@ -17,6 +18,8 @@ interface Transaction {
   id: string;
   date: string;
   type: "GRN_IN" | "SRN_OUT" | "ADJUSTMENT_IN" | "ADJUSTMENT_OUT" | "SITE_ISSUE_OUT";
+  itemId?: string;
+  itemName?: string;
   reference: string;
   quantity: number;
   unit: string;
@@ -39,57 +42,94 @@ interface InventoryItem {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SEED DATA — INVENTORY ITEMS (with realistic current locations)
-// ─────────────────────────────────────────────────────────────────────────────
-
-const SEED_ITEMS: InventoryItem[] = [
-  { id: "inv1", itemId: "TOOL-CUT-0001", name: "Angle Grinder 230mm", type: "Tool", categoryCode: "CUT", unit: "pcs", currentQuantity: 8, currentLocation: "Main Warehouse - Tool Bay A12", status: "Active", supplierName: "Hardware Lanka (Pvt) Ltd" },
-  { id: "inv2", itemId: "TOOL-DRL-0001", name: "Rotary Hammer Drill", type: "Tool", categoryCode: "DRL", unit: "pcs", currentQuantity: 4, currentLocation: "Main Warehouse - Tool Bay B05", status: "Active", supplierName: "Hardware Lanka (Pvt) Ltd" },
-  { id: "inv3", itemId: "REUS-SCF-0001", name: "Scaffolding Frame 1.8m", type: "Reusable", categoryCode: "SCF", unit: "frames", currentQuantity: 45, currentLocation: "Colombo City Tower Site", status: "Active", supplierName: "Ceylon Construction Materials" },
-  { id: "inv4", itemId: "REUS-PROP-0001", name: "Acrow Prop 3m", type: "Reusable", categoryCode: "PROP", unit: "props", currentQuantity: 120, currentLocation: "Main Warehouse - Racking C07", status: "Active", supplierName: "Ceylon Construction Materials" },
-  { id: "inv5", itemId: "CONS-CEM-0001", name: "OPC Cement 50kg", type: "Consumable", categoryCode: "CEM", unit: "Bags", currentQuantity: 250, currentLocation: "Nairobi Business Park Site Store", status: "Active", supplierName: "Ceylon Construction Materials" },
-  { id: "inv6", itemId: "CONS-RBR-0001", name: "T12 Rebar", type: "Consumable", categoryCode: "RBR", unit: "kg", currentQuantity: 3200, currentLocation: "Colombo City Tower Site", status: "Active", supplierName: "SteelMart International" },
-  { id: "inv7", itemId: "CONS-CONC-0001", name: "Ready-mix Concrete Grade 30", type: "Consumable", categoryCode: "CONC", unit: "Cubic metres", currentQuantity: 0, currentLocation: "Main Warehouse - Yard E09", status: "Inactive", supplierName: "Ceylon Construction Materials" },
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SEED TRANSACTIONS (simulated full lifecycle)
-// ─────────────────────────────────────────────────────────────────────────────
-
-const SEED_TRANSACTIONS: Transaction[] = [
-  // Angle Grinder
-  { id: "t1", date: "2026-04-10", type: "GRN_IN", reference: "GRN-2026-0002", quantity: 5, unit: "pcs", balanceAfter: 5, remarks: "Initial stock from GRN", relatedParty: "Hardware Lanka (Pvt) Ltd" },
-  { id: "t2", date: "2026-04-25", type: "ADJUSTMENT_IN", reference: "ADJ-001", quantity: 3, unit: "pcs", balanceAfter: 8, remarks: "Found additional units during stock take", relatedParty: "Internal" },
-  { id: "t3", date: "2026-05-05", type: "SITE_ISSUE_OUT", reference: "SITE-REQ-042", quantity: 2, unit: "pcs", balanceAfter: 6, remarks: "Issued to Colombo City Tower site", relatedParty: "Colombo City Tower" },
-  { id: "t4", date: "2026-05-12", type: "GRN_IN", reference: "GRN-2026-0005", quantity: 2, unit: "pcs", balanceAfter: 8, remarks: "Replacement units received", relatedParty: "Hardware Lanka (Pvt) Ltd" },
-  // Rotary Hammer Drill
-  { id: "t5", date: "2026-04-22", type: "GRN_IN", reference: "GRN-2026-0002", quantity: 4, unit: "pcs", balanceAfter: 4, remarks: "Initial stock", relatedParty: "Hardware Lanka (Pvt) Ltd" },
-  // Scaffolding Frame
-  { id: "t6", date: "2026-04-15", type: "GRN_IN", reference: "GRN-2026-0001", quantity: 60, unit: "frames", balanceAfter: 60, remarks: "Bulk purchase", relatedParty: "Ceylon Construction Materials" },
-  { id: "t7", date: "2026-04-28", type: "SITE_ISSUE_OUT", reference: "SITE-REQ-038", quantity: 15, unit: "frames", balanceAfter: 45, remarks: "Issued to Nairobi Business Park", relatedParty: "Nairobi Business Park" },
-  // Acrow Prop
-  { id: "t8", date: "2026-05-01", type: "GRN_IN", reference: "GRN-2026-0004", quantity: 150, unit: "props", balanceAfter: 150, remarks: "New shipment", relatedParty: "Ceylon Construction Materials" },
-  { id: "t9", date: "2026-05-10", type: "SITE_ISSUE_OUT", reference: "SITE-REQ-045", quantity: 30, unit: "props", balanceAfter: 120, remarks: "Issued to Colombo City Tower", relatedParty: "Colombo City Tower" },
-  // Cement
-  { id: "t10", date: "2026-04-19", type: "GRN_IN", reference: "GRN-2026-0001", quantity: 300, unit: "Bags", balanceAfter: 300, remarks: "Initial receipt", relatedParty: "Ceylon Construction Materials" },
-  { id: "t11", date: "2026-04-30", type: "SITE_ISSUE_OUT", reference: "SITE-REQ-040", quantity: 100, unit: "Bags", balanceAfter: 200, remarks: "Pouring foundation", relatedParty: "Colombo City Tower" },
-  { id: "t12", date: "2026-05-10", type: "SRN_OUT", reference: "SRN-2026-0001", quantity: 50, unit: "Bags", balanceAfter: 150, remarks: "Defective bags returned to supplier", relatedParty: "Ceylon Construction Materials" },
-  { id: "t13", date: "2026-05-18", type: "GRN_IN", reference: "GRN-2026-0006", quantity: 100, unit: "Bags", balanceAfter: 250, remarks: "Replacement received", relatedParty: "Ceylon Construction Materials" },
-  // Rebar
-  { id: "t14", date: "2026-05-10", type: "GRN_IN", reference: "GRN-2026-0002", quantity: 4000, unit: "kg", balanceAfter: 4000, remarks: "Initial stock", relatedParty: "SteelMart International" },
-  { id: "t15", date: "2026-05-14", type: "SRN_OUT", reference: "SRN-2026-0002", quantity: 1500, unit: "kg", balanceAfter: 2500, remarks: "Wrong grade returned", relatedParty: "SteelMart International" },
-  { id: "t16", date: "2026-05-20", type: "ADJUSTMENT_IN", reference: "ADJ-002", quantity: 700, unit: "kg", balanceAfter: 3200, remarks: "Correct grade received as replacement (manual adjust)", relatedParty: "SteelMart International" },
-  // Concrete (zero stock)
-  { id: "t17", date: "2026-04-10", type: "GRN_IN", reference: "GRN-2026-0003", quantity: 15, unit: "Cubic metres", balanceAfter: 15, remarks: "First delivery", relatedParty: "Ceylon Construction Materials" },
-  { id: "t18", date: "2026-04-15", type: "SITE_ISSUE_OUT", reference: "SITE-REQ-035", quantity: 15, unit: "Cubic metres", balanceAfter: 0, remarks: "Used for slab pour", relatedParty: "Colombo City Tower" },
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
 function formatDate(d: string) {
   return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function normalizeTrackingItem(raw: any): InventoryItem {
+  const type = String(raw?.type || raw?.item?.type || "").toLowerCase();
+  const item = raw?.item || raw;
+  return {
+    id: String(item?.id || raw?.id || ""),
+    itemId: String(item?.id || raw?.id || ""),
+    name: String(item?.itemName || item?.name || item?.model || "Unnamed Item"),
+    type: type === "tool" ? "Tool" : type === "reusable" ? "Reusable" : "Consumable",
+    categoryCode: String(item?.subCategory?.code || item?.categoryCode || item?.subCategoryCode || ""),
+    unit: String(item?.unit || (type === "tool" ? "pcs" : "pcs")),
+    currentQuantity: Number(type === "tool" ? item?.pieceNum ?? 1 : item?.quantity ?? item?.pieceNum ?? 0),
+    currentLocation: String(item?.location?.name || item?.location?.siteName || item?.locationId || item?.location || "Warehouse"),
+    status: String(item?.status || "Active"),
+    supplierName: String(item?.supplier || item?.supplierName || ""),
+  };
+}
+
+function mapGoodsReceivedNotes(notes: any[]): Transaction[] {
+  if (!Array.isArray(notes)) return [];
+  return notes.flatMap((note: any) => {
+    const date = String(note?.receivedDate || note?.createdAt || note?.updatedAt || "");
+    const reference = String(note?.goodsReceivedNumber || note?.id || note?.reference || "GRN");
+    const relatedParty = String(note?.supplier || note?.supplierName || "");
+    return (note.items || []).map((item: any, idx: number) => ({
+      id: `${reference}-GRN-${item?.id || idx}`,
+      date,
+      type: "GRN_IN",
+      itemId: String(item?.itemId || item?.id || ""),
+      itemName: String(item?.itemName || item?.name || ""),
+      reference,
+      quantity: Number(item?.quantity || item?.receivedQuantity || 0),
+      unit: String(item?.unit || "pcs"),
+      balanceAfter: 0,
+      remarks: String(note?.remarks || note?.comments || item?.notes || ""),
+      relatedParty,
+    }));
+  });
+}
+
+function mapReturnNotes(notes: any[]): Transaction[] {
+  if (!Array.isArray(notes)) return [];
+  return notes.flatMap((note: any) => {
+    const date = String(note?.returnDate || note?.createdAt || note?.updatedAt || "");
+    const reference = String(note?.returnNumber || note?.id || "SRN");
+    const relatedParty = String(note?.destinationName || note?.supplier || note?.destinationType || "");
+    return (note.items || []).map((item: any, idx: number) => ({
+      id: `${reference}-SRN-${item?.id || idx}`,
+      date,
+      type: "SRN_OUT",
+      itemId: String(item?.itemId || item?.id || ""),
+      itemName: String(item?.itemName || item?.name || ""),
+      reference,
+      quantity: Number(item?.quantity || item?.returnedQuantity || 0),
+      unit: String(item?.unit || "pcs"),
+      balanceAfter: 0,
+      remarks: String(note?.remarks || item?.reason || ""),
+      relatedParty,
+    }));
+  });
+}
+
+function mapTransferNotes(notes: any[]): Transaction[] {
+  if (!Array.isArray(notes)) return [];
+  return notes.flatMap((note: any) => {
+    const date = String(note?.transferDate || note?.createdAt || note?.updatedAt || "");
+    const reference = String(note?.transferId || note?.id || "TRN");
+    const relatedParty = String(note?.toSiteId || note?.toLocationId || note?.toSiteName || "");
+    return (note.items || []).map((item: any, idx: number) => ({
+      id: `${reference}-TRN-${item?.id || idx}`,
+      date,
+      type: "SITE_ISSUE_OUT",
+      itemId: String(item?.itemId || item?.id || ""),
+      itemName: String(item?.itemName || item?.name || ""),
+      reference,
+      quantity: Number(item?.quantity || item?.issuedQuantity || item?.receivedQuantity || 0),
+      unit: String(item?.unit || "pcs"),
+      balanceAfter: 0,
+      remarks: String(note?.remarks || note?.comments || ""),
+      relatedParty,
+    }));
+  });
 }
 
 function getTransactionIcon(type: Transaction["type"]) {
@@ -129,16 +169,13 @@ function getTransactionBadgeStyle(type: Transaction["type"]) {
 
 function ItemTrackingDrawer({ item, transactions, onClose }: { item: InventoryItem; transactions: Transaction[]; onClose: () => void }) {
   const itemTransactions = transactions.filter(t => {
-    // In a real app, we'd have an itemId on each transaction. For demo, we simulate by matching item name.
-    const itemNameMatch = 
-      (item.name === "Angle Grinder 230mm" && (t.reference === "GRN-2026-0002" || t.reference === "ADJ-001" || t.reference === "SITE-REQ-042" || t.reference === "GRN-2026-0005")) ||
-      (item.name === "Rotary Hammer Drill" && t.reference === "GRN-2026-0002") ||
-      (item.name === "Scaffolding Frame 1.8m" && (t.reference === "GRN-2026-0001" || t.reference === "SITE-REQ-038")) ||
-      (item.name === "Acrow Prop 3m" && (t.reference === "GRN-2026-0004" || t.reference === "SITE-REQ-045")) ||
-      (item.name === "OPC Cement 50kg" && (t.reference === "GRN-2026-0001" || t.reference === "SITE-REQ-040" || t.reference === "SRN-2026-0001" || t.reference === "GRN-2026-0006")) ||
-      (item.name === "T12 Rebar" && (t.reference === "GRN-2026-0002" || t.reference === "SRN-2026-0002" || t.reference === "ADJ-002")) ||
-      (item.name === "Ready-mix Concrete Grade 30" && (t.reference === "GRN-2026-0003" || t.reference === "SITE-REQ-035"));
-    return itemNameMatch;
+    const matchesItemId = t.itemId && item.itemId && t.itemId === item.itemId;
+    const matchesItemName = t.itemName && item.name && (
+      t.itemName === item.name ||
+      t.itemName.includes(item.name) ||
+      item.name.includes(t.itemName)
+    );
+    return Boolean(matchesItemId || matchesItemName);
   }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   let running = 0;
@@ -212,24 +249,52 @@ function ItemTrackingDrawer({ item, transactions, onClose }: { item: InventoryIt
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function ItemTrackingReportPage() {
-  const [items] = useState<InventoryItem[]>(SEED_ITEMS);
-  const [transactions] = useState<Transaction[]>(SEED_TRANSACTIONS);
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [filterStockStatus, setFilterStockStatus] = useState("all");
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [showOnlyWithTransactions, setShowOnlyWithTransactions] = useState(false);
+  const [apiError, setApiError] = useState("");
+
+  useEffect(() => {
+    const loadTrackingData = async () => {
+      try {
+        setApiError("");
+        const [itemsData, grnData, returnData, transferData] = await Promise.all([
+          apiFetch("/items"),
+          apiFetch("/goods-received-notes"),
+          apiFetch("/return-notes"),
+          apiFetch("/transfer-notes"),
+        ]);
+
+        if (Array.isArray(itemsData)) {
+          setItems(itemsData.map(normalizeTrackingItem));
+        }
+
+        const newTransactions: Transaction[] = [
+          ...mapGoodsReceivedNotes(Array.isArray(grnData) ? grnData : []),
+          ...mapReturnNotes(Array.isArray(returnData) ? returnData : []),
+          ...mapTransferNotes(Array.isArray(transferData) ? transferData : []),
+        ];
+        setTransactions(newTransactions);
+      } catch (error: any) {
+        console.warn("Item tracking live load failed", error);
+        setApiError(error?.message || "Unable to load live item tracking data.");
+      }
+    };
+
+    loadTrackingData();
+  }, []);
 
   const hasTransactions = (item: InventoryItem) => {
-    const has = 
-      (item.name === "Angle Grinder 230mm") ||
-      (item.name === "Rotary Hammer Drill") ||
-      (item.name === "Scaffolding Frame 1.8m") ||
-      (item.name === "Acrow Prop 3m") ||
-      (item.name === "OPC Cement 50kg") ||
-      (item.name === "T12 Rebar") ||
-      (item.name === "Ready-mix Concrete Grade 30");
-    return has;
+    return transactions.some((tx) =>
+      tx.itemId === item.itemId ||
+      tx.itemName === item.name ||
+      tx.itemName?.includes(item.name) ||
+      item.name.includes(tx.itemName || "")
+    );
   };
 
   const filteredItems = items.filter(item => {
