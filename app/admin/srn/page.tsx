@@ -215,8 +215,24 @@ function nextSRNNumber() {
 }
 
 function generateSupplierCode(suppliers: any[]) {
-  const nextNum = suppliers.length + 1;
+  const existingNumbers = suppliers
+    .map((s: any) => String(s.code || s.id || ""))
+    .map((code: string) => {
+      const match = code.match(/SUP-(\d+)/);
+      return match ? Number(match[1]) : 0;
+    })
+    .filter((n) => n > 0);
+
+  const nextNum = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
   return `SUP-${String(nextNum).padStart(3, "0")}`;
+}
+
+function supplierAlreadyExists(suppliers: any[], data: any) {
+  return suppliers.some((s: any) =>
+    (data.email && s.email?.toLowerCase() === data.email.toLowerCase()) ||
+    (data.name && s.name?.toLowerCase() === data.name.toLowerCase()) ||
+    (data.code && s.code === data.code)
+  );
 }
 
 // Maps a real /suppliers record onto the shape this file already uses.
@@ -872,53 +888,62 @@ export default function SupplierReturnNotePage() {
 
   // Supplier CRUD — wired to the real /suppliers API
   const createSupplier = async (data: any) => {
+    const payload = {
+      name: data.name,
+      contactPerson: data.contactPerson,
+      email: data.email,
+      phone: data.phone,
+      address: data.address,
+      taxId: data.taxId,
+      status: data.status,
+    };
+
     try {
       const created = await apiFetch("/suppliers", {
         method: "POST",
-        body: JSON.stringify({
-          name: data.name,
-          contactPerson: data.contactPerson,
-          email: data.email,
-          phone: data.phone,
-          address: data.address,
-          taxId: data.taxId,
-          status: data.status,
-        }),
+        body: JSON.stringify(payload),
       });
-      setSuppliers((prev) => [mapSupplierFromApi(created), ...prev]);
+      await loadSuppliers();
       setApiError("");
     } catch (error: any) {
       console.warn("API create failed, saving locally", error);
-      const newSupplier = {
-        ...data,
-        id: uid(),
-        code: data.code || generateSupplierCode(suppliers),
-        createdDate: todayStr(),
-      };
-      setSuppliers((prev) => [...prev, newSupplier]);
+      setSuppliers((prev) => {
+        if (supplierAlreadyExists(prev, payload)) {
+          return prev;
+        }
+        const newSupplier = {
+          ...payload,
+          id: uid(),
+          code: data.code || generateSupplierCode(prev),
+          createdDate: todayStr(),
+        };
+        return [...prev, newSupplier];
+      });
       setApiError(error?.message || "Saved locally because the API is unavailable.");
     }
     setSupplierModalOpen(false);
   };
   const updateSupplier = async (data: any) => {
+    const payload = {
+      name: data.name,
+      contactPerson: data.contactPerson,
+      email: data.email,
+      phone: data.phone,
+      address: data.address,
+      taxId: data.taxId,
+      status: data.status,
+    };
+
     try {
       const saved = await apiFetch(`/suppliers/${editingSupplier.id}`, {
         method: "PATCH",
-        body: JSON.stringify({
-          name: data.name,
-          contactPerson: data.contactPerson,
-          email: data.email,
-          phone: data.phone,
-          address: data.address,
-          taxId: data.taxId,
-          status: data.status,
-        }),
+        body: JSON.stringify(payload),
       });
-      setSuppliers((prev) => prev.map((s) => (s.id === editingSupplier.id ? mapSupplierFromApi(saved) : s)));
+      await loadSuppliers();
       setApiError("");
     } catch (error: any) {
       console.warn("API update failed, updating locally", error);
-      setSuppliers((prev) => prev.map((s) => (s.id === editingSupplier.id ? { ...data, id: s.id } : s)));
+      setSuppliers((prev) => prev.map((s) => (s.id === editingSupplier.id ? { ...s, ...payload } : s)));
       setApiError(error?.message || "Updated locally because the API is unavailable.");
     }
     setSupplierModalOpen(false);

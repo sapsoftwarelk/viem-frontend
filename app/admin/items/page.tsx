@@ -46,7 +46,9 @@ interface ItemFormData {
   quantity: number | string;
   unit: string;
   location: string;
+  locationId?: string;
   supplier: string;
+  supplierId?: string;
   purchaseDate: string;
   warrantyExp: string;
   batchDate: string;
@@ -231,11 +233,16 @@ function createItemPayload(form: ItemFormData, subCategories: SubCategory[]) {
     itemName: form.name,
     description: form.description || undefined,
     supplier: form.supplier || undefined,
-    location: form.location || undefined,
     status: form.status || undefined,
     purchaseDate: form.purchaseDate ? new Date(form.purchaseDate).toISOString() : undefined,
     warrantyExpiry: form.warrantyExp ? new Date(form.warrantyExp).toISOString() : undefined,
   };
+
+  if (form.locationId) {
+    payload.locationId = form.locationId;
+  } else {
+    payload.location = form.location || undefined;
+  }
 
   if (form.type === "Tool") {
     payload.quantity = Number(form.quantity) || 1;
@@ -554,11 +561,13 @@ function Field({ label, children, span = 1 }: { label: string; children: React.R
   );
 }
 
-function ItemForm({ initial, onSubmit, onCancel, subCategories = [] }: {
+function ItemForm({ initial, onSubmit, onCancel, subCategories = [], suppliers = [], siteLocations = [] }: {
   initial?: Partial<ItemFormData>;
   onSubmit: (data: ItemFormData) => void;
   onCancel: () => void;
   subCategories?: SubCategory[];
+  suppliers?: Array<{ id: string; name: string }>;
+  siteLocations?: Array<{ id: string; name: string }>;
 }) {
   const defaultForm: ItemFormData = {
     type: "Tool",
@@ -569,7 +578,9 @@ function ItemForm({ initial, onSubmit, onCancel, subCategories = [] }: {
     quantity: 1,
     unit: "",
     location: "",
+    locationId: "",
     supplier: "",
+    supplierId: "",
     purchaseDate: "",
     warrantyExp: "",
     batchDate: todayStr(),
@@ -581,6 +592,20 @@ function ItemForm({ initial, onSubmit, onCancel, subCategories = [] }: {
   const [form, setForm] = useState<ItemFormData>(
     initial ? { ...defaultForm, ...initial } : defaultForm
   );
+
+  useEffect(() => {
+    if (!initial) return;
+    const lookupSupplierId = suppliers.find((sup) => sup.name === initial.supplier)?.id;
+    const lookupLocationId = siteLocations.find((loc) => loc.name === initial.location)?.id;
+    setForm((f) => ({
+      ...f,
+      ...initial,
+      supplierId: initial.supplierId || lookupSupplierId || f.supplierId,
+      locationId: initial.locationId || lookupLocationId || f.locationId,
+      supplier: initial.supplier || f.supplier,
+      location: initial.location || f.location,
+    } as ItemFormData));
+  }, [initial, suppliers, siteLocations]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -822,12 +847,40 @@ function ItemForm({ initial, onSubmit, onCancel, subCategories = [] }: {
 
         {/* Location */}
         <Field label="Location / Site">
-          <input value={form.location} onChange={(e) => set("location", e.target.value)} placeholder="Site / Warehouse" className={inputCls} />
+          <select
+            value={form.locationId || ""}
+            onChange={(e) => {
+              const locationId = e.target.value;
+              const location = siteLocations.find((loc) => loc.id === locationId);
+              set("locationId", locationId);
+              set("location", location?.name || "");
+            }}
+            className={inputCls}
+          >
+            <option value="">— Select location —</option>
+            {siteLocations.map((loc) => (
+              <option key={loc.id} value={loc.id}>{loc.name}</option>
+            ))}
+          </select>
         </Field>
 
         {/* Supplier */}
         <Field label="Supplier">
-          <input value={form.supplier} onChange={(e) => set("supplier", e.target.value)} placeholder="Supplier name" className={inputCls} />
+          <select
+            value={form.supplier || ""}
+            onChange={(e) => {
+              const supplierName = e.target.value;
+              const selected = suppliers.find((sup) => sup.name === supplierName);
+              set("supplier", supplierName);
+              set("supplierId", selected?.id || "");
+            }}
+            className={inputCls}
+          >
+            <option value="">— Select supplier —</option>
+            {suppliers.map((sup) => (
+              <option key={sup.id} value={sup.name}>{sup.name}</option>
+            ))}
+          </select>
         </Field>
 
         {/* Purchase date */}
@@ -1224,6 +1277,8 @@ export default function ItemRegistration() {
   const [qrItem, setQrItem] = useState<ItemFormData | null>(null);
   const [apiError, setApiError] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [siteLocations, setSiteLocations] = useState<any[]>([]);
 
   useEffect(() => {
     const load = async () => {
@@ -1242,6 +1297,24 @@ export default function ItemRegistration() {
       } catch (error: any) {
         console.warn("Unable to load items from backend:", error);
         setApiError("Unable to connect to the backend item service. Showing local data only.");
+      }
+
+      try {
+        const result = await apiFetch("/suppliers");
+        if (Array.isArray(result)) {
+          setSuppliers(result.map((sup: any) => ({ id: sup.id, name: sup.name }))); 
+        }
+      } catch (error: any) {
+        console.warn("Unable to load suppliers from backend:", error);
+      }
+
+      try {
+        const result = await apiFetch("/site-locations");
+        if (Array.isArray(result)) {
+          setSiteLocations(result.map((loc: any) => ({ id: loc.id, name: loc.siteName || loc.name || "" })));
+        }
+      } catch (error: any) {
+        console.warn("Unable to load site locations from backend:", error);
       }
     };
 
@@ -1461,10 +1534,25 @@ export default function ItemRegistration() {
 
       {/* Modals */}
       <Modal open={modal === "create"} onClose={() => setModal(null)} title="Register New Item">
-        <ItemForm subCategories={subCategories} onSubmit={create} onCancel={() => setModal(null)} />
+        <ItemForm
+          subCategories={subCategories}
+          suppliers={suppliers}
+          siteLocations={siteLocations}
+          onSubmit={create}
+          onCancel={() => setModal(null)}
+        />
       </Modal>
       <Modal open={modal === "edit"} onClose={() => setModal(null)} title="Edit Item">
-        {target && <ItemForm initial={target} subCategories={subCategories} onSubmit={update} onCancel={() => setModal(null)} />}
+        {target && (
+          <ItemForm
+            initial={target}
+            subCategories={subCategories}
+            suppliers={suppliers}
+            siteLocations={siteLocations}
+            onSubmit={update}
+            onCancel={() => setModal(null)}
+          />
+        )}
       </Modal>
       <ConfirmDelete
         open={modal === "delete"}
