@@ -675,17 +675,20 @@ function GRNForm({ initial, onSubmit, onCancel, pos, linkedPO: initialLinkedPO, 
   const selectCls = "w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white text-slate-700 appearance-none cursor-pointer";
 
   // Handle person selection with ID tracking
-  const handleReceivedByChange = (personName: string) => {
-    const person = persons.find((p: any) => p.name === personName || p.fullName === personName);
-    set("receivedBy", personName);
-    set("receivedById", person ? person.id : "");
+  const handleReceivedByChange = (personId: string) => {
+    const person = persons.find((p: any) => p.id === personId);
+    set("receivedBy", person?.name ?? "");
+    set("receivedById", personId);
   };
 
-  const handleInspectedByChange = (personName: string) => {
-    const person = persons.find((p: any) => p.name === personName || p.fullName === personName);
-    set("inspectedBy", personName);
-    set("inspectedById", person ? person.id : "");
+  const handleInspectedByChange = (personId: string) => {
+    const person = persons.find((p: any) => p.id === personId);
+    set("inspectedBy", person?.name ?? "");
+    set("inspectedById", personId);
   };
+
+  const receivedById = form.receivedById || persons.find((p: any) => p.name === form.receivedBy)?.id || "";
+  const inspectedById = form.inspectedById || persons.find((p: any) => p.name === form.inspectedBy)?.id || "";
 
   return (
     <div className="p-6 space-y-6">
@@ -786,13 +789,13 @@ function GRNForm({ initial, onSubmit, onCancel, pos, linkedPO: initialLinkedPO, 
           </label>
           <div className="relative">
             <select 
-              value={form.receivedBy} 
+              value={receivedById}
               onChange={(e) => handleReceivedByChange(e.target.value)} 
               className={selectCls}
             >
               <option value="">— Select Person —</option>
               {activePersons.map((person: any) => (
-                <option key={person.id} value={person.name}>
+                <option key={person.id} value={person.id}>
                   {person.name} ({person.empId})
                 </option>
               ))}
@@ -819,13 +822,13 @@ function GRNForm({ initial, onSubmit, onCancel, pos, linkedPO: initialLinkedPO, 
           </label>
           <div className="relative">
             <select 
-              value={form.inspectedBy} 
+              value={inspectedById}
               onChange={(e) => handleInspectedByChange(e.target.value)} 
               className={selectCls}
             >
               <option value="">— Select Person —</option>
               {activePersons.map((person: any) => (
-                <option key={person.id} value={person.name}>
+                <option key={person.id} value={person.id}>
                   {person.name} ({person.empId})
                 </option>
               ))}
@@ -1264,13 +1267,7 @@ export default function GoodsReceivedNotePage() {
         setSuppliers(supplierData);
       }
       if (Array.isArray(employeeData)) {
-        setPersons(employeeData);
-      }
-      if (Array.isArray(supplierData)) {
-        setSuppliers(supplierData);
-      }
-      if (Array.isArray(employeeData)) {
-        setPersons(employeeData);
+        setPersons(mapEmployeesFromApi(employeeData));
       }
     } catch (err: any) {
       setLoadError(err.message || "Failed to load data");
@@ -1540,4 +1537,17 @@ export default function GoodsReceivedNotePage() {
       <ConfirmDelete open={modal === "delete"} onClose={() => setModal(null)} onConfirm={remove} name={target?.grnNumber} />
     </div>
   );
+}
+
+// The employee API uses backend field names; normalize them for this form.
+function mapEmployeesFromApi(list: any[]) {
+  return (Array.isArray(list) ? list : []).map((employee: any) => ({
+    id: employee.id,
+    name: employee.fullName ?? employee.name ?? "",
+    fullName: employee.fullName ?? employee.name ?? "",
+    empId: employee.employeeId ?? employee.empId ?? "",
+    email: employee.email ?? "",
+    phone: employee.contact ?? employee.phone ?? "",
+    status: String(employee.status ?? "").toLowerCase(),
+  }));
 }
