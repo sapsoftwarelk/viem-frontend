@@ -46,7 +46,7 @@ function NewSubCategoryForm({ categories, onSubmit, onCancel }: { categories: an
     <div>
       <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
         <div>
-          <h2 className="text-lg font-bold text-slate-800">Add new subcategory</h2>
+          <h2 className="text-lg font-bold text-slate-800">Add new category</h2>
           <p className="text-sm text-slate-500 mt-1">Create a new subcategory for tools, reusable items, or consumables.</p>
         </div>
         <button onClick={onCancel} className="w-8 h-8 rounded-full text-slate-400 hover:bg-slate-100 flex items-center justify-center">
@@ -55,7 +55,7 @@ function NewSubCategoryForm({ categories, onSubmit, onCancel }: { categories: an
       </div>
       <div className="px-6 py-6 space-y-4">
         <div>
-          <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Category</label>
+          <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Type</label>
           <select value={form.categoryId} onChange={(e) => setField("categoryId", e.target.value)} className={inputCls}>
             {categories.map((cat) => (
               <option key={cat.id} value={cat.id}>
@@ -65,7 +65,7 @@ function NewSubCategoryForm({ categories, onSubmit, onCancel }: { categories: an
           </select>
         </div>
         <div>
-          <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Subcategory Name</label>
+          <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Category Name</label>
           <input value={form.name} onChange={(e) => setField("name", e.target.value)} className={inputCls} placeholder="Cutting Machines" />
         </div>
         <div>
@@ -131,11 +131,11 @@ export default function SubCategoryAdminPage() {
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Admin / Inventory</p>
-            <h1 className="text-[26px] font-extrabold text-slate-900">Subcategory management</h1>
-            <p className="text-sm text-slate-500 mt-1">Add or review subcategories used by tools, reusable items and consumables.</p>
+            <h1 className="text-[26px] font-extrabold text-slate-900">Category management</h1>
+            <p className="text-sm text-slate-500 mt-1">Add or review Categories used by tools, reusable items and consumables.</p>
           </div>
           <button onClick={() => setShowModal(true)} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors">
-            <Plus size={16} /> New Subcategory
+            <Plus size={16} /> New Category
           </button>
         </div>
 

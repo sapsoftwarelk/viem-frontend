@@ -61,8 +61,7 @@ type AvailableItem = {
   label: string;
 };
 
-// Real employee fetched from the backend, used to populate the
-// "Responsible Person" combobox instead of a hardcoded list.
+
 type Employee = {
   id: string;
   name: string;
