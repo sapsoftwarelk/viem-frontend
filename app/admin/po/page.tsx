@@ -171,6 +171,7 @@ function mapPurchaseOrderToUI(po: any) {
     id: poId,
     poNumber: poId,
     status: normalizePOStatus(po?.status),
+    supplierId: po?.supplierId || "",
     supplier: po?.supplier || "",
     site: po?.site || "",
     siteLocationId: po?.siteLocationId || "",
@@ -725,7 +726,7 @@ function POForm({ initial, onSubmit, onCancel, onGoRegister, registeredItems, si
   onGoRegister: () => void; registeredItems: any[]; siteLocations: any[]; suppliers: any[]; employees: any[]; onNewItemRegistered: (item: any) => void;
 }) {
   const defaultPO = {
-    poNumber: nextPONumber(), status: "Draft", supplier: "", site: "", siteLocationId: "",
+    poNumber: nextPONumber(), status: "Draft", supplier: "", supplierId: "", site: "", siteLocationId: "",
     requestedBy: "", approvedBy: "", createdDate: todayStr(),
     requiredDate: "", deliveredDate: "", notes: "", lines: [],
   };
@@ -768,7 +769,7 @@ function POForm({ initial, onSubmit, onCancel, onGoRegister, registeredItems, si
   };
 
   const { subtotal } = calcTotals(form.lines);
-  const valid = form.lines.length > 0;
+  const valid = form.lines.length > 0 && Boolean(form.supplierId);
   const inputCls = "w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white text-slate-700";
 
   return (
@@ -790,13 +791,19 @@ function POForm({ initial, onSubmit, onCancel, onGoRegister, registeredItems, si
         </div>
         <div className="col-span-2">
           <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5 tracking-wider">Supplier / Vendor</label>
-          <select value={form.supplier} onChange={(e) => set("supplier", e.target.value)} className={inputCls}>
+          <select
+            value={form.supplierId}
+            onChange={(e) => {
+              const supplierId = e.target.value;
+              const selected = suppliers.find((s: any) => s.id === supplierId);
+              set("supplierId", supplierId);
+              set("supplier", selected?.name || "");
+            }}
+            className={inputCls}
+          >
             <option value="">Select a supplier…</option>
-            {form.supplier && !suppliers.some((s: any) => s.name === form.supplier) && (
-              <option value={form.supplier}>{form.supplier} (not in supplier list)</option>
-            )}
             {suppliers.map((s: any) => (
-              <option key={s.id} value={s.name}>{s.name}{s.code ? ` (${s.code})` : ""}</option>
+              <option key={s.id} value={s.id}>{s.name}{s.code ? ` (${s.code})` : ""}</option>
             ))}
           </select>
         </div>
@@ -1414,7 +1421,7 @@ export default function PurchaseOrderPage() {
 
   const create = async (data: any) => {
     const payload = {
-      supplier: data.supplier || "",
+      supplierId: data.supplierId || null,
       siteLocationId: data.siteLocationId || null,
       totalCost: (data.lines || []).reduce((sum: number, line: any) => sum + (line.qtyOrdered || 0) * (line.unitPrice || 0), 0),
       expectedDate: data.requiredDate ? new Date(data.requiredDate) : new Date(),
@@ -1426,7 +1433,7 @@ export default function PurchaseOrderPage() {
         unit: line.unit || null,
         quantity: Number(line.qtyOrdered || 1),
         unitPrice: Number(line.unitPrice || 0),
-        subCategoryId: 1,
+        subCategoryId: line.subCategoryId !== undefined && line.subCategoryId !== null ? Number(line.subCategoryId) : null,
       })),
     };
 
