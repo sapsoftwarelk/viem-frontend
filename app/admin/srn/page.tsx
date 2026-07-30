@@ -180,18 +180,19 @@ function normalizeSRNStatus(status?: string) {
 }
 
 function mapSRNToUI(note: any) {
+  let metadata: any = {};
+  try { metadata = JSON.parse(note?.remarks || "{}"); } catch { metadata = {}; }
+  const source = metadata?.supplierReturn ? metadata : note;
   return {
-    id: note?.id || note?.returnNumber || "",
-    returnNumber: note?.returnNumber || note?.id || "",
-    supplierId: note?.supplierId || "",
-    supplierName: note?.supplierName || note?.supplier?.name || note?.supplier || "",
-    returnDate: note?.returnDate || (note?.createdAt ? new Date(note.createdAt).toISOString().slice(0, 10) : ""),
-    status: normalizeSRNStatus(note?.status),
-    reason: note?.reason || "",
-    notes: note?.notes || "",
+    id: note?.id || source?.returnNumber || "",
+    returnNumber: source?.returnNumber || note?.id || "",
+    supplierId: source?.supplierId || "",
+    supplierName: source?.supplierName || note?.supplier?.name || "",
+    returnDate: source?.returnDate || (note?.returnDate ? new Date(note.returnDate).toISOString().slice(0, 10) : ""),
+    status: normalizeSRNStatus(source?.status), reason: source?.reason || "", notes: source?.notes || "",
     totalItems: note?.totalItems ?? (Array.isArray(note?.lines) ? note.lines.reduce((sum: number, line: any) => sum + Number(line?.quantity || 0), 0) : 0),
     totalValue: note?.totalValue ?? (Array.isArray(note?.lines) ? note.lines.reduce((sum: number, line: any) => sum + Number(line?.total ?? (line?.quantity || 0) * (line?.unitPrice || 0)), 0) : 0),
-    createdBy: note?.createdBy || "",
+    createdBy: source?.createdBy || "",
     createdAt: note?.createdAt ? new Date(note.createdAt).toISOString().slice(0, 10) : "",
     lines: Array.isArray(note?.lines)
       ? note.lines.map((line: any, index: number) => ({
@@ -442,7 +443,7 @@ function SuppliersManagerModal({ open, onClose, suppliers, onAdd, onEdit, onDele
 // SUPPLIER RETURN NOTE LINE ROW
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ReturnNoteLineRow({ line, index, onUpdate, onRemove, isEditing }: any) {
+function ReturnNoteLineRow({ line, index, onUpdate, onRemove, isEditing, items }: any) {
   const inputCls = "w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white";
   
   const updateLineField = (field: string, value: any) => {
@@ -468,6 +469,26 @@ function ReturnNoteLineRow({ line, index, onUpdate, onRemove, isEditing }: any) 
         )}
       </div>
       <div className="p-5">
+        {isEditing && (
+          <div className="mb-4">
+            <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1.5">Pick Registered Item</label>
+            <select
+              value={line.itemId || ""}
+              onChange={(e) => {
+                const item = items.find((candidate: any) => candidate.id === e.target.value);
+                if (item) {
+                  onUpdate(line.id, { ...line, itemId: item.id, itemName: item.name, unit: item.unit || line.unit });
+                }
+              }}
+              className={inputCls}
+            >
+              <option value="">Pick an item from inventory…</option>
+              {items.map((item: any) => (
+                <option key={item.id} value={item.id}>{item.name} ({item.id})</option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="mb-4">
           <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1.5">Item Name *</label>
           {isEditing ? (
@@ -545,7 +566,7 @@ function ReturnNoteLineRow({ line, index, onUpdate, onRemove, isEditing }: any) 
 // SUPPLIER RETURN NOTE FORM
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ReturnNoteForm({ initial, onSubmit, onCancel, suppliers }: any) {
+function ReturnNoteForm({ initial, onSubmit, onCancel, suppliers, employees, items }: any) {
   const defaultNote = {
     id: "",
     returnNumber: nextSRNNumber(),
@@ -558,6 +579,7 @@ function ReturnNoteForm({ initial, onSubmit, onCancel, suppliers }: any) {
     totalItems: 0,
     totalValue: 0,
     createdBy: "Current User",
+    createdById: "",
     createdAt: todayStr(),
     lines: [] as any[],
   };
@@ -647,7 +669,19 @@ function ReturnNoteForm({ initial, onSubmit, onCancel, suppliers }: any) {
         </div>
         <div>
           <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5">Created By</label>
-          <input value={form.createdBy} onChange={(e) => setField("createdBy", e.target.value)} className={inputCls} />
+          <select
+            value={form.createdById || ""}
+            onChange={(e) => {
+              const employee = employees.find((person: any) => person.id === e.target.value);
+              setForm((current: any) => ({ ...current, createdById: e.target.value, createdBy: employee?.name || "" }));
+            }}
+            className={selectCls}
+          >
+            <option value="">Select user…</option>
+            {employees.map((employee: any) => (
+              <option key={employee.id} value={employee.id}>{employee.name} ({employee.employeeId})</option>
+            ))}
+          </select>
         </div>
         <div className="col-span-2">
           <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5">Return Reason (Summary)</label>
@@ -674,7 +708,7 @@ function ReturnNoteForm({ initial, onSubmit, onCancel, suppliers }: any) {
         ) : (
           <div className="space-y-4">
             {form.lines.map((line: any, i: number) => (
-              <ReturnNoteLineRow key={line.id} line={line} index={i} onUpdate={updateLine} onRemove={removeLine} isEditing />
+              <ReturnNoteLineRow key={line.id} line={line} index={i} onUpdate={updateLine} onRemove={removeLine} isEditing items={items} />
             ))}
           </div>
         )}
@@ -839,6 +873,8 @@ export default function SupplierReturnNotePage() {
   const [drawerSRN, setDrawerSRN] = useState<any>(null);
   const [deleteSRNTarget, setDeleteSRNTarget] = useState<any>(null);
   const [apiError, setApiError] = useState("");
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [items, setItems] = useState<any[]>([]);
 
   // Derived stats
   const totalReturns = returnNotes.length;
@@ -875,6 +911,11 @@ export default function SupplierReturnNotePage() {
 
     loadData();
     loadSuppliers();
+    Promise.all([apiFetch("/employees").catch(() => []), apiFetch("/items").catch(() => [])])
+      .then(([employeeData, itemData]) => {
+        setEmployees(mapEmployeesForSRN(employeeData));
+        setItems(mapItemsForSRN(itemData));
+      });
   }, []);
 
   // Filtered return notes
@@ -971,6 +1012,8 @@ export default function SupplierReturnNotePage() {
       createdAt: todayStr(),
       supplierName: suppliers.find((s) => s.id === data.supplierId)?.name || "",
       lines: data.lines || [],
+      items: (data.lines || []).map((line: any) => ({ itemId: line.itemId || null, itemName: line.itemName, quantity: Number(line.quantity || 0) })),
+      remarks: JSON.stringify({ supplierReturn: true, ...data, supplierName: suppliers.find((s) => s.id === data.supplierId)?.name || "" }),
     };
 
     try {
@@ -1189,6 +1232,8 @@ export default function SupplierReturnNotePage() {
                 onSubmit={editingSRN ? updateSRN : createSRN}
                 onCancel={() => { setSrnModalOpen(false); setEditingSRN(null); }}
                 suppliers={suppliers}
+                employees={employees}
+                items={items}
               />
             </div>
           </div>
@@ -1221,4 +1266,21 @@ export default function SupplierReturnNotePage() {
       />
     </div>
   );
+}
+
+function mapEmployeesForSRN(list: any[]) {
+  return (Array.isArray(list) ? list : [])
+    .filter((employee: any) => String(employee.status || "").toLowerCase() === "active")
+    .map((employee: any) => ({
+      id: employee.id,
+      name: employee.fullName || employee.name || "",
+      employeeId: employee.employeeId || employee.empId || "",
+    }));
+}
+
+function mapItemsForSRN(list: any[]) {
+  return (Array.isArray(list) ? list : []).map((record: any) => {
+    const item = record.item || record;
+    return { id: item.id, name: item.itemName || item.name || item.id, unit: item.unit || "pcs" };
+  }).filter((item: any) => item.id);
 }
