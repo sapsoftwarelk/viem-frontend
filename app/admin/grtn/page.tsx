@@ -9,6 +9,7 @@ import {
   Warehouse, Undo2, AlertTriangle, Check, Download, FileText
 } from "lucide-react";
 import Badge from "@/components/shared/Badge";
+import { apiFetch } from "@/lib/api";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -45,6 +46,9 @@ interface InventoryItem {
   siteStock: InventoryStock;
 }
 
+interface SelectOption { id: string; name: string; }
+interface LiveSite extends SelectOption { subLevels: string[]; }
+
 interface SiteReturnNote {
   id: string;
   returnNumber: string;
@@ -69,94 +73,68 @@ interface SiteReturnNote {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SEED DATA (matching existing system)
-// ─────────────────────────────────────────────────────────────────────────────
-
-const SITES = [
-  { id: "site1", name: "Colombo City Tower", subLevels: ["Block A Level 1", "Block A Level 2", "Block B Ground"] },
-  { id: "site2", name: "Nairobi Business Park", subLevels: ["Phase 1 Ground", "Phase 1 Mezzanine"] },
-  { id: "site3", name: "Kandy Hills Resort", subLevels: ["Main Building Ground", "Pool Area"] },
-];
-
-const WAREHOUSES = [
-  { id: "wh1", name: "Central Warehouse" },
-  { id: "wh2", name: "Regional Depot - Kandy" },
-];
-
-const SUPPLIERS = [
-  { id: "sup1", name: "Ceylon Construction Materials" },
-  { id: "sup2", name: "SteelMart International" },
-  { id: "sup3", name: "Hardware Lanka (Pvt) Ltd" },
-];
-
-const INVENTORY_ITEMS: InventoryItem[] = [
-  { id: "item1", name: "OPC Cement 50kg", unit: "Bags", siteStock: { site1: 250, site2: 100, site3: 50 } },
-  { id: "item2", name: "T12 Rebar", unit: "kg", siteStock: { site1: 1200, site2: 800, site3: 400 } },
-  { id: "item3", name: "Scaffolding Frame", unit: "frames", siteStock: { site1: 45, site2: 30, site3: 20 } },
-  { id: "item4", name: "Angle Grinder", unit: "pcs", siteStock: { site1: 4, site2: 2, site3: 1 } },
-];
-
-const EMPLOYEES = [
-  { id: "emp1", name: "Anil Perera", role: "Site Manager" },
-  { id: "emp2", name: "Kamala Wijesinghe", role: "TO" },
-  { id: "emp7", name: "Kasun Perera", role: "Driver" },
-];
-
-// Seed return notes
-const SEED_RETURNS: SiteReturnNote[] = [
-  {
-    id: "ret1",
-    returnNumber: "SRTN-2026-0001",
-    siteId: "site1",
-    siteName: "Colombo City Tower",
-    subLevel: "Block A Level 1",
-    destinationType: "WAREHOUSE",
-    destinationId: "wh1",
-    destinationName: "Central Warehouse",
-    items: [
-      { id: "ri1", itemId: "item1", itemName: "OPC Cement 50kg", unit: "Bags", availableStock: 250, returnedQuantity: 20, reason: "Excess stock", condition: "Good" },
-      { id: "ri2", itemId: "item3", itemName: "Scaffolding Frame", unit: "frames", availableStock: 45, returnedQuantity: 5, reason: "Work completed", condition: "Good" },
-    ],
-    status: "IN_TRANSIT",
-    requestDate: "2026-05-22",
-    requestedBy: "Anil Perera",
-    approvedBy: "Kamala Wijesinghe",
-    dispatchDate: "2026-05-23",
-    vehicleId: "veh1",
-    driverId: "emp7",
-    notes: "Return excess cement and unused scaffolding",
-    createdAt: "2026-05-22T08:00:00Z",
-    updatedAt: "2026-05-23T10:00:00Z",
-  },
-  {
-    id: "ret2",
-    returnNumber: "SRTN-2026-0002",
-    siteId: "site2",
-    siteName: "Nairobi Business Park",
-    subLevel: "Phase 1 Ground",
-    destinationType: "SUPPLIER",
-    destinationId: "sup2",
-    destinationName: "SteelMart International",
-    items: [
-      { id: "ri3", itemId: "item2", itemName: "T12 Rebar", unit: "kg", availableStock: 800, returnedQuantity: 500, reason: "Wrong grade supplied", condition: "Wrong Item" },
-    ],
-    status: "APPROVED",
-    requestDate: "2026-05-20",
-    requestedBy: "John Mwangi",
-    approvedBy: "Sarah Kimani",
-    notes: "Return incorrect rebar grade",
-    createdAt: "2026-05-20T09:00:00Z",
-    updatedAt: "2026-05-21T14:00:00Z",
-  },
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
 function formatDate(d: string) { return new Date(d).toLocaleDateString("en-GB"); }
 function todayStr() { return new Date().toISOString().slice(0, 10); }
+
+function normalizeReturnNote(raw: any): SiteReturnNote {
+  const status = Object.prototype.hasOwnProperty.call(STATUS_LABELS, raw?.status)
+    ? raw.status as ReturnStatus
+    : "DRAFT";
+  return {
+    id: String(raw?.id || uid()),
+    returnNumber: String(raw?.id || "GRTN"),
+    siteId: String(raw?.siteId || raw?.fromSiteId || ""),
+    siteName: String(raw?.siteName || "Unknown site"),
+    subLevel: String(raw?.subLevel || ""),
+    destinationType: raw?.destinationType === "SUPPLIER" ? "SUPPLIER" : "WAREHOUSE",
+    destinationId: String(raw?.destinationId || raw?.toSiteId || ""),
+    destinationName: String(raw?.destinationName || "Unknown destination"),
+    items: Array.isArray(raw?.items) ? raw.items.map((item: any, index: number) => ({
+      id: String(item?.id || `${raw?.id || "return"}-${index}`),
+      itemId: String(item?.itemId || ""),
+      itemName: String(item?.itemName || "Unnamed item"),
+      unit: String(item?.unit || "units"),
+      availableStock: Number(item?.availableStock || 0),
+      returnedQuantity: Number(item?.quantity || item?.returnedQuantity || 0),
+      reason: String(item?.reason || ""),
+      condition: item?.condition || "Good",
+    })) : [],
+    status,
+    requestDate: raw?.returnDate ? String(raw.returnDate).slice(0, 10) : todayStr(),
+    requestedBy: String(raw?.requestedBy || ""),
+    notes: String(raw?.remarks || ""),
+    createdAt: raw?.createdAt || new Date().toISOString(),
+    updatedAt: raw?.updatedAt || new Date().toISOString(),
+  };
+}
+
+function toReturnNotePayload(note: SiteReturnNote) {
+  return {
+    siteId: note.siteId,
+    siteName: note.siteName,
+    subLevel: note.subLevel,
+    destinationType: note.destinationType,
+    destinationId: note.destinationId,
+    destinationName: note.destinationName,
+    status: note.status,
+    requestedBy: note.requestedBy,
+    returnDate: note.requestDate,
+    remarks: note.notes,
+    items: note.items.map((item) => ({
+      itemId: item.itemId || undefined,
+      itemName: item.itemName,
+      quantity: item.returnedQuantity,
+      unit: item.unit,
+      availableStock: item.availableStock,
+      reason: item.reason,
+      condition: item.condition,
+    })),
+  };
+}
 
 const STATUS_STYLES: Record<ReturnStatus, "gray" | "amber" | "blue" | "purple" | "green" | "red"> = {
   DRAFT: "gray",
@@ -182,7 +160,7 @@ const STATUS_LABELS: Record<ReturnStatus, string> = {
 // RETURN NOTE FORM MODAL
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ReturnNoteModal({ open, onClose, onSave, initial }: any) {
+function ReturnNoteModal({ open, onClose, onSave, initial, sites, warehouses, suppliers, inventoryItems, employees }: any) {
   const [form, setForm] = useState({
     siteId: "",
     subLevel: "",
@@ -213,19 +191,19 @@ function ReturnNoteModal({ open, onClose, onSave, initial }: any) {
   }, [open, initial]);
 
   const handleSiteChange = (siteId: string) => {
-    const site = SITES.find(s => s.id === siteId);
+    const site = sites.find((site: LiveSite) => site.id === siteId);
     setForm({ ...form, siteId, subLevel: site?.subLevels[0] || "", items: [] });
   };
 
   const getAvailableStockForSite = (itemId: string) => {
-    const item = INVENTORY_ITEMS.find(i => i.id === itemId);
+    const item = inventoryItems.find((item: InventoryItem) => item.id === itemId);
     if (!item || !form.siteId) return 0;
     return item.siteStock?.[form.siteId] || 0;
   };
 
   const handleAddItem = () => {
     if (!selectedItem.itemId || selectedItem.quantity <= 0) return;
-    const item = INVENTORY_ITEMS.find(i => i.id === selectedItem.itemId);
+    const item = inventoryItems.find((item: InventoryItem) => item.id === selectedItem.itemId);
     if (!item) return;
     const stock = getAvailableStockForSite(selectedItem.itemId);
     if (selectedItem.quantity > stock) {
@@ -266,7 +244,7 @@ function ReturnNoteModal({ open, onClose, onSave, initial }: any) {
 
   const updateItemQty = (itemId: string, newQty: number) => {
     if (newQty < 0) return;
-    const item = INVENTORY_ITEMS.find(i => i.id === itemId);
+    const item = inventoryItems.find((item: InventoryItem) => item.id === itemId);
     const stock = getAvailableStockForSite(itemId);
     if (newQty > stock) {
       alert(`Cannot exceed available stock (${stock} ${item?.unit})`);
@@ -280,19 +258,19 @@ function ReturnNoteModal({ open, onClose, onSave, initial }: any) {
 
   const isValid = form.siteId && form.destinationId && form.items.length > 0 && form.requestedBy;
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!isValid) return;
     const newReturn: SiteReturnNote = {
       id: initial?.id || uid(),
       returnNumber: initial?.returnNumber || `SRTN-${new Date().getFullYear()}-${Math.floor(Math.random() * 10000)}`,
       siteId: form.siteId,
-      siteName: SITES.find(s => s.id === form.siteId)?.name || "",
+      siteName: sites.find((site: LiveSite) => site.id === form.siteId)?.name || "",
       subLevel: form.subLevel,
       destinationType: form.destinationType,
       destinationId: form.destinationId,
       destinationName: form.destinationType === "WAREHOUSE" 
-        ? WAREHOUSES.find(w => w.id === form.destinationId)?.name || ""
-        : SUPPLIERS.find(s => s.id === form.destinationId)?.name || "",
+        ? warehouses.find((warehouse: SelectOption) => warehouse.id === form.destinationId)?.name || ""
+        : suppliers.find((supplier: SelectOption) => supplier.id === form.destinationId)?.name || "",
       items: form.items,
       status: initial?.status || "DRAFT",
       requestDate: todayStr(),
@@ -301,13 +279,13 @@ function ReturnNoteModal({ open, onClose, onSave, initial }: any) {
       createdAt: initial?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    onSave(newReturn);
-    onClose();
+    const saved = await onSave(newReturn);
+    if (saved !== false) onClose();
   };
 
   if (!open) return null;
 
-  const destinations = form.destinationType === "WAREHOUSE" ? WAREHOUSES : SUPPLIERS;
+  const destinations = form.destinationType === "WAREHOUSE" ? warehouses : suppliers;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
@@ -323,14 +301,14 @@ function ReturnNoteModal({ open, onClose, onSave, initial }: any) {
               <label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Site *</label>
               <select value={form.siteId} onChange={(e) => handleSiteChange(e.target.value)} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm">
                 <option value="">Select Site</option>
-                {SITES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                {sites.map((site: LiveSite) => <option key={site.id} value={site.id}>{site.name}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Sub‑level</label>
               <select value={form.subLevel} onChange={(e) => setForm({ ...form, subLevel: e.target.value })} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm" disabled={!form.siteId}>
                 <option value="">Entire Site</option>
-                {SITES.find(s => s.id === form.siteId)?.subLevels.map(sl => <option key={sl} value={sl}>{sl}</option>)}
+                {sites.find((site: LiveSite) => site.id === form.siteId)?.subLevels.map((subLevel: string) => <option key={subLevel} value={subLevel}>{subLevel}</option>)}
               </select>
             </div>
             <div>
@@ -341,12 +319,12 @@ function ReturnNoteModal({ open, onClose, onSave, initial }: any) {
               </div>
               <select value={form.destinationId} onChange={(e) => setForm({ ...form, destinationId: e.target.value })} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm">
                 <option value="">Select {form.destinationType === "WAREHOUSE" ? "Warehouse" : "Supplier"}</option>
-                {destinations.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                {destinations.map((destination: SelectOption) => <option key={destination.id} value={destination.id}>{destination.name}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Requested By *</label>
-              <input value={form.requestedBy} onChange={(e) => setForm({ ...form, requestedBy: e.target.value })} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm" />
+              <select value={form.requestedBy} onChange={(e) => setForm({ ...form, requestedBy: e.target.value })} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm"><option value="">Select user</option>{employees.map((employee: SelectOption) => <option key={employee.id} value={employee.name}>{employee.name}</option>)}</select>
             </div>
           </div>
 
@@ -357,12 +335,12 @@ function ReturnNoteModal({ open, onClose, onSave, initial }: any) {
             </div>
             <div className="bg-slate-50 rounded-xl p-4 mb-3">
               <div className="grid grid-cols-12 gap-2 items-end">
-                <div className="col-span-5"><label className="text-[10px] font-semibold text-slate-400">Item</label><select value={selectedItem.itemId} onChange={(e) => { const id = e.target.value; setSelectedItem({ ...selectedItem, itemId: id }); setAvailableStock(getAvailableStockForSite(id)); }} className="w-full border rounded-lg px-3 py-2 text-sm bg-white"><option value="">Select</option>{INVENTORY_ITEMS.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}</select></div>
+                <div className="col-span-5"><label className="text-[10px] font-semibold text-slate-400">Item</label><select value={selectedItem.itemId} onChange={(e) => { const id = e.target.value; setSelectedItem({ ...selectedItem, itemId: id }); setAvailableStock(getAvailableStockForSite(id)); }} className="w-full border rounded-lg px-3 py-2 text-sm bg-white"><option value="">Select item</option>{inventoryItems.map((item: InventoryItem) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
                 <div className="col-span-2"><label className="text-[10px] font-semibold text-slate-400">Qty</label><input type="number" min="1" value={selectedItem.quantity} onChange={(e) => setSelectedItem({ ...selectedItem, quantity: Number(e.target.value) })} className="w-full border rounded-lg px-3 py-2 text-sm" /></div>
                 <div className="col-span-3"><label className="text-[10px] font-semibold text-slate-400">Condition</label><select value={selectedItem.condition} onChange={(e) => setSelectedItem({ ...selectedItem, condition: e.target.value as any })} className="w-full border rounded-lg px-3 py-2 text-sm"><option>Good</option><option>Minor Damage</option><option>Damaged</option><option>Wrong Item</option></select></div>
                 <div className="col-span-2"><button onClick={handleAddItem} className="w-full bg-emerald-600 text-white rounded-lg py-2 text-sm"><Plus size={14} className="inline mr-1" /> Add</button></div>
               </div>
-              <div className="text-[11px] text-slate-400 mt-2">Available at site: {availableStock} {INVENTORY_ITEMS.find(i => i.id === selectedItem.itemId)?.unit}</div>
+              <div className="text-[11px] text-slate-400 mt-2">Available at site: {availableStock} {inventoryItems.find((item: InventoryItem) => item.id === selectedItem.itemId)?.unit}</div>
             </div>
             {form.items.length === 0 ? (
               <div className="border-2 border-dashed rounded-xl py-8 text-center text-slate-400 text-sm">No items added.</div>
@@ -447,13 +425,71 @@ function ReturnNoteDrawer({ note, onClose, onUpdateStatus }: { note: SiteReturnN
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function SiteReturnNotePage() {
-  const [returns, setReturns] = useState<SiteReturnNote[]>(SEED_RETURNS);
+  const [returns, setReturns] = useState<SiteReturnNote[]>([]);
+  const [sites, setSites] = useState<LiveSite[]>([]);
+  const [warehouses, setWarehouses] = useState<SelectOption[]>([]);
+  const [suppliers, setSuppliers] = useState<SelectOption[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [employees, setEmployees] = useState<SelectOption[]>([]);
   const [search, setSearch] = useState("");
   const [filterSite, setFilterSite] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [modalOpen, setModalOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<SiteReturnNote | null>(null);
   const [viewingNote, setViewingNote] = useState<SiteReturnNote | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState("");
+
+  useEffect(() => {
+    const loadData = async () => {
+      const results = await Promise.allSettled([
+        apiFetch("/return-notes"),
+        apiFetch("/site-locations"),
+        apiFetch("/suppliers"),
+        apiFetch("/items"),
+        apiFetch("/employees"),
+      ]);
+      const value = (index: number) => results[index].status === "fulfilled" ? results[index].value : [];
+      const locations = Array.isArray(value(1)) ? value(1) : [];
+
+      setReturns(Array.isArray(value(0)) ? value(0).map(normalizeReturnNote) : []);
+      const liveSites = locations.map((location: any) => ({
+        id: String(location.id),
+        name: String(location.siteName || location.name || location.id),
+        subLevels: Array.isArray(location.subLevels)
+          ? location.subLevels.map((level: any) => typeof level === "string" ? level : String(level?.name || "")).filter(Boolean)
+          : [],
+      })).filter((site: LiveSite) => site.id && site.name);
+      setSites(liveSites);
+      setWarehouses(liveSites.map(({ id, name }: LiveSite) => ({ id, name })));
+      setSuppliers((Array.isArray(value(2)) ? value(2) : []).map((supplier: any) => ({
+        id: String(supplier.id), name: String(supplier.name || supplier.code || supplier.id),
+      })).filter((supplier: SelectOption) => supplier.id && supplier.name));
+      setInventoryItems((Array.isArray(value(3)) ? value(3) : []).map((entry: any) => {
+        const item = entry?.item || entry;
+        const id = String(item?.id || entry?.id || "");
+        const locationId = String(item?.locationId || "");
+        return {
+          id,
+          name: String(item?.itemName || item?.name || item?.model || id),
+          unit: String(item?.unit || "units"),
+          siteStock: locationId ? { [locationId]: Number(item?.quantity ?? 1) } : {},
+        };
+      }).filter((item: InventoryItem) => item.id && item.name));
+      setEmployees((Array.isArray(value(4)) ? value(4) : []).map((employee: any) => ({
+        id: String(employee.id), name: String(employee.fullName || employee.name || employee.employeeId || employee.id),
+      })).filter((employee: SelectOption) => employee.id && employee.name));
+
+      if (results.some((result) => result.status === "rejected")) {
+        setApiError("Some form options could not be loaded. Check that the API is running and you are signed in.");
+      }
+      setLoading(false);
+    };
+    loadData().catch((error: any) => {
+      setApiError(error?.message || "Unable to load GRTN data.");
+      setLoading(false);
+    });
+  }, []);
 
   const filtered = returns.filter(r => {
     const matchesSearch = r.returnNumber.toLowerCase().includes(search.toLowerCase()) || r.siteName.toLowerCase().includes(search.toLowerCase());
@@ -462,24 +498,49 @@ export default function SiteReturnNotePage() {
     return matchesSearch && matchesSite && matchesStatus;
   });
 
-  const handleSave = (note: SiteReturnNote) => {
-    if (returns.find(r => r.id === note.id)) {
-      setReturns(prev => prev.map(r => r.id === note.id ? note : r));
-    } else {
-      setReturns([note, ...returns]);
+  const handleSave = async (note: SiteReturnNote) => {
+    try {
+      const exists = returns.some((returnNote) => returnNote.id === note.id);
+      const saved = await apiFetch(exists ? `/return-notes/${note.id}` : "/return-notes", {
+        method: exists ? "PUT" : "POST",
+        body: JSON.stringify(toReturnNotePayload(note)),
+      });
+      const normalized = normalizeReturnNote(saved);
+      setReturns((prev) => exists
+        ? prev.map((returnNote) => returnNote.id === normalized.id ? normalized : returnNote)
+        : [normalized, ...prev]);
+      setModalOpen(false);
+      setEditingNote(null);
+      return true;
+    } catch (error: any) {
+      setApiError(error?.message || "Unable to save the return note.");
+      return false;
     }
-    setModalOpen(false);
-    setEditingNote(null);
   };
 
-  const handleUpdateStatus = (id: string, newStatus: ReturnStatus) => {
-    setReturns(prev => prev.map(r => r.id === id ? { ...r, status: newStatus, updatedAt: new Date().toISOString() } : r));
-    setViewingNote(null);
+  const handleUpdateStatus = async (id: string, newStatus: ReturnStatus) => {
+    try {
+      const saved = await apiFetch(`/return-notes/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ status: newStatus }),
+      });
+      const normalized = normalizeReturnNote(saved);
+      setReturns((prev) => prev.map((returnNote) => returnNote.id === id ? normalized : returnNote));
+      setViewingNote(null);
+    } catch (error: any) {
+      setApiError(error?.message || "Unable to update the return status.");
+    }
   };
 
-  const handleDelete = (id: string) => {
-    setReturns(prev => prev.filter(r => r.id !== id));
-    setViewingNote(null);
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Delete this return note?")) return;
+    try {
+      await apiFetch(`/return-notes/${id}`, { method: "DELETE" });
+      setReturns((prev) => prev.filter((returnNote) => returnNote.id !== id));
+      setViewingNote(null);
+    } catch (error: any) {
+      setApiError(error?.message || "Unable to delete the return note.");
+    }
   };
 
   return (
@@ -488,11 +549,12 @@ export default function SiteReturnNotePage() {
         <div><h1 className="text-[20px] font-bold text-slate-800">Site Return Notes</h1><p className="text-sm text-slate-500">Return items from sites to warehouse or supplier</p></div>
         <button onClick={() => { setEditingNote(null); setModalOpen(true); }} className="btn btn-primary"><Plus size={14} /> New Return Note</button>
       </div>
+      {apiError && <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{apiError}</div>}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-4 bg-white p-3 rounded-xl border">
         <div className="flex-1 relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input placeholder="Search by number or site..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm" /></div>
-        <select value={filterSite} onChange={(e) => setFilterSite(e.target.value)} className="border rounded-lg px-3 py-2 text-sm"><option value="all">All Sites</option>{SITES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+        <select value={filterSite} onChange={(e) => setFilterSite(e.target.value)} className="border rounded-lg px-3 py-2 text-sm"><option value="all">All Sites</option>{sites.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}</select>
         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="border rounded-lg px-3 py-2 text-sm"><option value="all">All Status</option>{Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
       </div>
 
@@ -515,13 +577,14 @@ export default function SiteReturnNotePage() {
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={7} className="p-8 text-center text-slate-400">No return notes found</td></tr>}
+            {loading && <tr><td colSpan={7} className="p-8 text-center text-slate-400">Loading return notes...</td></tr>}
+            {!loading && filtered.length === 0 && <tr><td colSpan={7} className="p-8 text-center text-slate-400">No return notes found</td></tr>}
           </tbody>
         </table>
       </div>
 
       {/* Modals */}
-      <ReturnNoteModal open={modalOpen} onClose={() => { setModalOpen(false); setEditingNote(null); }} onSave={handleSave} initial={editingNote} />
+      <ReturnNoteModal open={modalOpen} onClose={() => { setModalOpen(false); setEditingNote(null); }} onSave={handleSave} initial={editingNote} sites={sites} warehouses={warehouses} suppliers={suppliers} inventoryItems={inventoryItems} employees={employees} />
       {viewingNote && <ReturnNoteDrawer note={viewingNote} onClose={() => setViewingNote(null)} onUpdateStatus={handleUpdateStatus} />}
     </div>
   );
