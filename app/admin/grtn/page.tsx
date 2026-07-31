@@ -81,19 +81,26 @@ function formatDate(d: string) { return new Date(d).toLocaleDateString("en-GB");
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 
 function normalizeReturnNote(raw: any): SiteReturnNote {
+  let legacyDetails: any = {};
+  if (typeof raw?.remarks === "string" && raw.remarks.trim().startsWith("{")) {
+    try { legacyDetails = JSON.parse(raw.remarks); } catch { /* keep plain-text remarks */ }
+  }
   const status = Object.prototype.hasOwnProperty.call(STATUS_LABELS, raw?.status)
     ? raw.status as ReturnStatus
-    : "DRAFT";
+    : legacyDetails?.status?.toUpperCase?.().replace(/\s+/g, "_") in STATUS_LABELS
+      ? legacyDetails.status.toUpperCase().replace(/\s+/g, "_") as ReturnStatus
+      : "DRAFT";
+  const savedItems = Array.isArray(raw?.items) && raw.items.length ? raw.items : legacyDetails?.lines;
   return {
     id: String(raw?.id || uid()),
-    returnNumber: String(raw?.id || "GRTN"),
+    returnNumber: String(legacyDetails?.returnNumber || raw?.id || "GRTN"),
     siteId: String(raw?.siteId || raw?.fromSiteId || ""),
-    siteName: String(raw?.siteName || "Unknown site"),
+    siteName: String(raw?.siteName || legacyDetails?.siteName || legacyDetails?.fromSiteName || (legacyDetails?.supplierReturn ? "Supplier return" : "Not specified")),
     subLevel: String(raw?.subLevel || ""),
-    destinationType: raw?.destinationType === "SUPPLIER" ? "SUPPLIER" : "WAREHOUSE",
+    destinationType: raw?.destinationType === "SUPPLIER" || legacyDetails?.supplierReturn ? "SUPPLIER" : "WAREHOUSE",
     destinationId: String(raw?.destinationId || raw?.toSiteId || ""),
-    destinationName: String(raw?.destinationName || "Unknown destination"),
-    items: Array.isArray(raw?.items) ? raw.items.map((item: any, index: number) => ({
+    destinationName: String(raw?.destinationName || legacyDetails?.destinationName || legacyDetails?.supplierName || "Not specified"),
+    items: Array.isArray(savedItems) ? savedItems.map((item: any, index: number) => ({
       id: String(item?.id || `${raw?.id || "return"}-${index}`),
       itemId: String(item?.itemId || ""),
       itemName: String(item?.itemName || "Unnamed item"),
@@ -491,7 +498,8 @@ export default function SiteReturnNotePage() {
     });
   }, []);
 
-  const filtered = returns.filter(r => {
+  const incompleteReturnCount = returns.filter((returnNote) => !returnNote.siteId || !returnNote.destinationId).length;
+  const filtered = returns.filter((returnNote) => returnNote.siteId && returnNote.destinationId).filter(r => {
     const matchesSearch = r.returnNumber.toLowerCase().includes(search.toLowerCase()) || r.siteName.toLowerCase().includes(search.toLowerCase());
     const matchesSite = filterSite === "all" || r.siteId === filterSite;
     const matchesStatus = filterStatus === "all" || r.status === filterStatus;
@@ -550,6 +558,7 @@ export default function SiteReturnNotePage() {
         <button onClick={() => { setEditingNote(null); setModalOpen(true); }} className="btn btn-primary"><Plus size={14} /> New Return Note</button>
       </div>
       {apiError && <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{apiError}</div>}
+      {incompleteReturnCount > 0 && <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">{incompleteReturnCount} incomplete legacy return note{incompleteReturnCount > 1 ? "s are" : " is"} hidden because no site or destination was saved. New GRTNs save these fields correctly.</div>}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-4 bg-white p-3 rounded-xl border">
@@ -578,7 +587,7 @@ export default function SiteReturnNotePage() {
               </tr>
             ))}
             {loading && <tr><td colSpan={7} className="p-8 text-center text-slate-400">Loading return notes...</td></tr>}
-            {!loading && filtered.length === 0 && <tr><td colSpan={7} className="p-8 text-center text-slate-400">No return notes found</td></tr>}
+            {!loading && filtered.length === 0 && <tr><td colSpan={7} className="p-8 text-center text-slate-400">No complete return notes found</td></tr>}
           </tbody>
         </table>
       </div>
