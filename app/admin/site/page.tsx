@@ -144,20 +144,25 @@ function mapBackendLocation(location: any): Location {
     name: location.siteName || location.name || "",
     status: location.status || "Planning",
     region: location.region || "",
-    sites: sites.map((s: any) => ({
-      id: s.id,
-      name: s.name || "",
-      manager: s.manager || "",
-      managerHistory: Array.isArray(s.managerHistory) ? s.managerHistory : [],
-      region: s.region || "",
-      seq: s.seq || 1,
-      status: s.status || "Planning",
-      client: s.client || "",
-      contactNumber: s.contactNumber || "",
-      address: s.address || "",
-      startDate: s.startDate ? s.startDate.split("T")[0] : "",
-      remarks: s.remarks || "",
-    })),
+    sites: sites
+      // Defensive: never let an id-less record from the backend reach the UI.
+      // The backend now guarantees ids on write, but old rows created before
+      // that fix may still be missing one — skip them rather than crash.
+      .filter((s: any) => !!s?.id)
+      .map((s: any) => ({
+        id: s.id,
+        name: s.name || "",
+        manager: s.manager || "",
+        managerHistory: Array.isArray(s.managerHistory) ? s.managerHistory : [],
+        region: s.region || "",
+        seq: s.seq || 1,
+        status: s.status || "Planning",
+        client: s.client || "",
+        contactNumber: s.contactNumber || "",
+        address: s.address || "",
+        startDate: s.startDate ? s.startDate.split("T")[0] : "",
+        remarks: s.remarks || "",
+      })),
   };
 }
 
@@ -166,7 +171,12 @@ function locationPayload(location: Partial<Location>) {
     siteName: location.name,
     status: location.status,
     region: location.region,
+    // Note: `id` is included when present (existing sites) and omitted
+    // when absent (brand-new sites). The backend is the sole authority
+    // on assigning/validating sub-level ids — see normalizeSubLevels()
+    // in site-locations.service.ts. We never invent ids on the client.
     subLevels: location.sites?.map((s) => ({
+      ...(s.id ? { id: s.id } : {}),
       name: s.name,
       manager: s.manager,
       managerHistory: s.managerHistory,
@@ -277,7 +287,7 @@ function SiteModal({ title, initial, onClose, onSave }: any) {
     if (!isValid) return;
 
     let updatedHistory = [...form.managerHistory];
-    
+
     // Check if the manager changed to log previous manager into deployment history
     if (initial && initial.manager && initial.manager !== form.manager) {
       const historyEntry: ManagerHistoryEntry = {
@@ -373,7 +383,7 @@ function LocationDetailPanel({ location, onUpdate, onClose }: any) {
   const [modal, setModal] = useState<
     { type: "add" } | { type: "edit"; site: Site } | { type: "delete"; site: Site } | null
   >(null);
-  
+
   // Track open state for individual site histories in layout
   const [expandedHistories, setExpandedHistories] = useState<Record<string, boolean>>({});
 
@@ -384,24 +394,33 @@ function LocationDetailPanel({ location, onUpdate, onClose }: any) {
   const updateLocation = (patch: Partial<Location>) => onUpdate({ ...location, ...patch });
 
   const handleAddSite = async (data: any) => {
-    const newSite = { 
-      id: `${location.id}-SITE-${pad(location.sites.length + 1, 2)}`, 
+    // No client-side id generation. The backend is the single source of
+    // truth for sub-level ids (see normalizeSubLevels in
+    // site-locations.service.ts) — it assigns a fresh, collision-free id
+    // on save and the mapped response replaces this optimistic entry.
+    const newSite = {
       ...data,
-      managerHistory: [] 
+      managerHistory: [],
     };
     await updateLocation({ sites: [...location.sites, newSite] });
     setModal(null);
   };
-  
+
   const handleEditSite = async (data: any) => {
     if (modal?.type !== "edit") return;
-    await updateLocation({ sites: location.sites.map((s: Site) => s.id === modal.site.id ? { ...s, ...data } : s) });
+    await updateLocation({
+      sites: location.sites.map((s: Site) =>
+        s.id && modal.site.id && s.id === modal.site.id ? { ...s, ...data } : s
+      ),
+    });
     setModal(null);
   };
-  
+
   const handleDeleteSite = async () => {
     if (modal?.type !== "delete") return;
-    await updateLocation({ sites: location.sites.filter((s: Site) => s.id !== modal.site.id) });
+    await updateLocation({
+      sites: location.sites.filter((s: Site) => s.id !== modal.site.id),
+    });
     setModal(null);
   };
 
@@ -439,25 +458,29 @@ function LocationDetailPanel({ location, onUpdate, onClose }: any) {
           </div>
         ) : (
           <div className="space-y-4 overflow-auto pr-1">
-            {location.sites.map((site: Site) => {
-              const isHistoryOpen = !!expandedHistories[site.id];
+            {location.sites.map((site: Site, index: number) => {
+              // Fall back to index as the React key only — never as the
+              // actual site id used for edit/delete matching — in case a
+              // legacy record still slips through without one.
+              const rowKey = site.id || `unindexed-${index}`;
+              const isHistoryOpen = !!expandedHistories[rowKey];
               return (
-                <div key={site.id} className={`border ${color.subBorder} rounded-xl p-4 hover:shadow-sm transition-all group ${color.cardBg}`}>
+                <div key={rowKey} className={`border ${color.subBorder} rounded-xl p-4 hover:shadow-sm transition-all group ${color.cardBg}`}>
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span className={`font-mono text-[10px] ${color.accent} font-semibold`}>{site.id}</span>
+                        <span className={`font-mono text-[10px] ${color.accent} font-semibold`}>{site.id || "—"}</span>
                         <Badge variant={STATUS_STYLES[site.status] as any}>{site.status}</Badge>
                       </div>
                       <h4 className="font-semibold text-slate-800 mt-0.5">{site.name}</h4>
-                      
+
                       <div className="grid grid-cols-2 gap-x-6 gap-y-1 mt-2 text-sm text-slate-600">
                         <div className="flex items-center gap-1.5 col-span-1">
                           <div><span className="font-medium">Manager:</span> {site.manager}</div>
                           {site.managerHistory && site.managerHistory.length > 0 && (
-                            <button 
+                            <button
                               type="button"
-                              onClick={() => toggleHistory(site.id)}
+                              onClick={() => toggleHistory(rowKey)}
                               className="inline-flex items-center text-xs text-slate-400 hover:text-indigo-600 ml-1 bg-white border border-slate-200 shadow-sm rounded px-1 py-0.5 transition"
                               title="View History Log"
                             >
