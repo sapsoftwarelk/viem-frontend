@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, API_BASE_URL } from "@/lib/api";
 import {
   Building2, MapPin, Calendar, User, Phone, Mail, FileText,
   Package, Truck, Clock, CheckCircle, AlertCircle, TrendingUp,
@@ -225,6 +225,18 @@ export default function SiteReportPage() {
   const [transferNotes, setTransferNotes] = useState<TransferNote[]>([]);
   const [returnNotes, setReturnNotes] = useState<SiteReturnNote[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [showPeopleModal, setShowPeopleModal] = useState(false);
+  const [showVehiclesModal, setShowVehiclesModal] = useState(false);
+  // Controlled bulk-assign selections (people)
+  const [selectedSitesBulk, setSelectedSitesBulk] = useState<Set<string>>(new Set());
+  const [selectedSubLevelsBulk, setSelectedSubLevelsBulk] = useState<Set<string>>(new Set());
+  const [selectedPersonsBulk, setSelectedPersonsBulk] = useState<Set<string>>(new Set());
+  // Controlled bulk-assign selections (vehicles)
+  const [selectedSitesVehicleBulk, setSelectedSitesVehicleBulk] = useState<Set<string>>(new Set());
+  const [selectedSubLevelsVehicleBulk, setSelectedSubLevelsVehicleBulk] = useState<Set<string>>(new Set());
+  const [selectedVehiclesBulk, setSelectedVehiclesBulk] = useState<Set<string>>(new Set());
   const [selectedSiteId, setSelectedSiteId] = useState<string>("");
   const [dateFrom, setDateFrom] = useState<string>(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10));
   const [dateTo, setDateTo] = useState<string>(new Date().toISOString().slice(0, 10));
@@ -237,12 +249,14 @@ export default function SiteReportPage() {
       setLoading(true);
       try {
         setApiError("");
-        const [sitesData, tasksData, transfersData, returnsData, itemsData] = await Promise.all([
+        const [sitesData, tasksData, transfersData, returnsData, itemsData, employeesData, vehiclesData] = await Promise.all([
           apiFetch("/site-locations"),
           apiFetch("/tasks"),
           apiFetch("/transfer-notes"),
           apiFetch("/return-notes"),
           apiFetch("/items"),
+          apiFetch("/employees"),
+          apiFetch("/vehicles"),
         ]);
 
         const mappedSites = Array.isArray(sitesData) ? sitesData.map(normalizeSite).filter((site) => site.id) : [];
@@ -263,6 +277,8 @@ export default function SiteReportPage() {
         setTransferNotes(Array.isArray(transfersData) ? transfersData.map((item) => normalizeTransfer(item, siteNameById)) : []);
         setReturnNotes(Array.isArray(returnsData) ? returnsData.map((item) => normalizeReturn(item, siteNameById)) : []);
         setInventoryItems(Array.isArray(itemsData) ? itemsData.map(normalizeSiteStock) : []);
+        setEmployees(Array.isArray(employeesData) ? employeesData : []);
+        setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
       } catch (error: any) {
         console.warn("Site report live load failed", error);
         setApiError(error?.message || "Unable to load live site report data.");
@@ -410,6 +426,12 @@ export default function SiteReportPage() {
           <div className="flex gap-2">
             <button onClick={handlePrint} className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-xl text-[13px] font-semibold hover:bg-slate-700">
               <Printer size={14} /> Print Report
+            </button>
+            <button onClick={() => setShowPeopleModal(true)} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-[13px] font-semibold hover:bg-blue-700">
+              <Users size={14} /> Bulk Assign People
+            </button>
+            <button onClick={() => setShowVehiclesModal(true)} className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-xl text-[13px] font-semibold hover:bg-purple-700">
+              <Truck size={14} /> Bulk Assign Vehicles
             </button>
           </div>
         </div>
@@ -676,6 +698,218 @@ export default function SiteReportPage() {
           </div>
         </div>
       </div>
+      {/* Bulk assign modals */}
+      {showPeopleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-3xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold">Bulk Assign People to Sites</h3>
+              <button onClick={() => { setShowPeopleModal(false); setSelectedSitesBulk(new Set()); setSelectedSubLevelsBulk(new Set()); setSelectedPersonsBulk(new Set()); }} className="text-slate-400">Close</button>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm font-semibold mb-2">Select Site / Sub‑level</p>
+                <div className="max-h-64 overflow-auto border rounded p-2">
+                  {sites.map((s) => (
+                    <div key={s.id} className="mb-2">
+                      <label className="font-semibold">
+                        <input type="checkbox" checked={selectedSitesBulk.has(s.id)} onChange={() => {
+                          const next = new Set(selectedSitesBulk);
+                          if (next.has(s.id)) next.delete(s.id); else next.add(s.id);
+                          setSelectedSitesBulk(next);
+                        }} className="mr-2" /> {s.name} ({s.code})
+                      </label>
+                      <div className="pl-6 mt-1">
+                        {s.subLevels.map((sl) => {
+                          const key = `${s.id}::${sl}`;
+                          return (
+                            <div key={sl}>
+                              <label>
+                                <input type="checkbox" checked={selectedSubLevelsBulk.has(key)} onChange={() => {
+                                  const next = new Set(selectedSubLevelsBulk);
+                                  if (next.has(key)) next.delete(key); else next.add(key);
+                                  setSelectedSubLevelsBulk(next);
+                                }} className="mr-2" /> {sl}
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-sm font-semibold mb-2">Select People</p>
+                <div className="max-h-64 overflow-auto border rounded p-2">
+                  {employees.map((e) => (
+                    <div key={e.id} className="mb-1">
+                      <label>
+                        <input type="checkbox" checked={selectedPersonsBulk.has(e.id)} onChange={() => {
+                          const next = new Set(selectedPersonsBulk);
+                          if (next.has(e.id)) next.delete(e.id); else next.add(e.id);
+                          setSelectedPersonsBulk(next);
+                        }} className="mr-2" /> {e.fullName || e.name}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 flex gap-2">
+                  <button className="btn btn-primary" onClick={async () => {
+                    const persons = Array.from(selectedPersonsBulk).map(id => {
+                      const emp = employees.find((x:any) => x.id === id);
+                      return { id, name: emp?.fullName || emp?.name || '' };
+                    });
+                    const selectedTargets: any[] = [];
+                    // Entire sites
+                    Array.from(selectedSitesBulk).forEach(siteId => selectedTargets.push({ locationId: siteId }));
+                    // Sublevels that aren't covered by an entire-site selection
+                    Array.from(selectedSubLevelsBulk).forEach(key => {
+                      const [siteId, subLevel] = key.split('::');
+                      if (!selectedSitesBulk.has(siteId)) selectedTargets.push({ locationId: siteId, subLevelId: subLevel });
+                    });
+                    if (selectedTargets.length === 0 || persons.length === 0) { alert('Select at least one target and one person'); return; }
+                    const assignments = selectedTargets.map(t => ({ locationId: t.locationId, subLevelId: t.subLevelId, persons }));
+                    try {
+                      const res = await fetch(`${API_BASE_URL}/site-locations/assign-people`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assignments }) });
+                      if (!res.ok) throw new Error('Assign failed');
+                      alert('People assigned successfully');
+                      setShowPeopleModal(false);
+                      setSelectedSitesBulk(new Set()); setSelectedSubLevelsBulk(new Set()); setSelectedPersonsBulk(new Set());
+                      const refreshed = await apiFetch('/site-locations');
+                      setSites(Array.isArray(refreshed) ? refreshed.map(normalizeSite) : []);
+                    } catch (err:any) { alert(err.message || 'Failed'); }
+                  }}>Assign</button>
+                  <button className="btn" onClick={async () => {
+                    const persons = Array.from(selectedPersonsBulk).map(id => {
+                      const emp = employees.find((x:any) => x.id === id);
+                      return { id, name: emp?.fullName || emp?.name || '' };
+                    });
+                    const selectedTargets: any[] = [];
+                    Array.from(selectedSitesBulk).forEach(siteId => selectedTargets.push({ locationId: siteId }));
+                    Array.from(selectedSubLevelsBulk).forEach(key => {
+                      const [siteId, subLevel] = key.split('::');
+                      if (!selectedSitesBulk.has(siteId)) selectedTargets.push({ locationId: siteId, subLevelId: subLevel });
+                    });
+                    if (selectedTargets.length === 0 || persons.length === 0) { alert('Select at least one target and one person'); return; }
+                    const assignments = selectedTargets.map(t => ({ locationId: t.locationId, subLevelId: t.subLevelId, persons }));
+                    try {
+                      const res = await fetch(`${API_BASE_URL}/site-locations/assign-people?download=true`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assignments }) });
+                      if (!res.ok) throw new Error('Download failed');
+                      const blob = await res.blob();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url; a.download = 'site-people-assignments.pdf'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+                      setShowPeopleModal(false);
+                      setSelectedSitesBulk(new Set()); setSelectedSubLevelsBulk(new Set()); setSelectedPersonsBulk(new Set());
+                    } catch (err:any) { alert(err.message || 'Failed'); }
+                  }}>Download PDF</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {showVehiclesModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-3xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold">Bulk Assign Vehicles to Sites</h3>
+              <button onClick={() => { setShowVehiclesModal(false); setSelectedSitesVehicleBulk(new Set()); setSelectedSubLevelsVehicleBulk(new Set()); setSelectedVehiclesBulk(new Set()); }} className="text-slate-400">Close</button>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm font-semibold mb-2">Select Site / Sub‑level</p>
+                <div className="max-h-64 overflow-auto border rounded p-2">
+                  {sites.map((s) => (
+                    <div key={s.id} className="mb-2">
+                      <label className="font-semibold">
+                        <input type="checkbox" checked={selectedSitesVehicleBulk.has(s.id)} onChange={() => {
+                          const next = new Set(selectedSitesVehicleBulk);
+                          if (next.has(s.id)) next.delete(s.id); else next.add(s.id);
+                          setSelectedSitesVehicleBulk(next);
+                        }} className="mr-2" /> {s.name} ({s.code})
+                      </label>
+                      <div className="pl-6 mt-1">
+                        {s.subLevels.map((sl) => {
+                          const key = `${s.id}::${sl}`;
+                          return (
+                            <div key={sl}>
+                              <label>
+                                <input type="checkbox" checked={selectedSubLevelsVehicleBulk.has(key)} onChange={() => {
+                                  const next = new Set(selectedSubLevelsVehicleBulk);
+                                  if (next.has(key)) next.delete(key); else next.add(key);
+                                  setSelectedSubLevelsVehicleBulk(next);
+                                }} className="mr-2" /> {sl}
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-sm font-semibold mb-2">Select Vehicles</p>
+                <div className="max-h-64 overflow-auto border rounded p-2">
+                  {vehicles.map((v) => (
+                    <div key={v.id} className="mb-1">
+                      <label>
+                        <input type="checkbox" checked={selectedVehiclesBulk.has(v.id)} onChange={() => {
+                          const next = new Set(selectedVehiclesBulk);
+                          if (next.has(v.id)) next.delete(v.id); else next.add(v.id);
+                          setSelectedVehiclesBulk(next);
+                        }} className="mr-2" /> {v.registrationNo || v.vehiclePlate || v.plate || v.id}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 flex gap-2">
+                  <button className="btn btn-primary" onClick={async () => {
+                    const vehs = Array.from(selectedVehiclesBulk).map(id => {
+                      const v = vehicles.find((x:any) => x.id === id);
+                      return { id, vehiclePlate: v?.registrationNo || v?.vehiclePlate || v?.plate || '' };
+                    });
+                    const selectedTargets: any[] = [];
+                    Array.from(selectedSitesVehicleBulk).forEach(siteId => selectedTargets.push({ locationId: siteId }));
+                    Array.from(selectedSubLevelsVehicleBulk).forEach(key => { const [siteId, subLevel] = key.split('::'); if (!selectedSitesVehicleBulk.has(siteId)) selectedTargets.push({ locationId: siteId, subLevelId: subLevel }); });
+                    if (selectedTargets.length === 0 || vehs.length === 0) { alert('Select at least one target and one vehicle'); return; }
+                    const assignments = selectedTargets.map(t => ({ locationId: t.locationId, subLevelId: t.subLevelId, vehicles: vehs }));
+                    try {
+                      const res = await fetch(`${API_BASE_URL}/site-locations/assign-vehicles`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assignments }) });
+                      if (!res.ok) throw new Error('Assign failed');
+                      alert('Vehicles assigned successfully');
+                      setShowVehiclesModal(false);
+                      setSelectedSitesVehicleBulk(new Set()); setSelectedSubLevelsVehicleBulk(new Set()); setSelectedVehiclesBulk(new Set());
+                      const refreshed = await apiFetch('/site-locations');
+                      setSites(Array.isArray(refreshed) ? refreshed.map(normalizeSite) : []);
+                    } catch (err:any) { alert(err.message || 'Failed'); }
+                  }}>Assign</button>
+                  <button className="btn" onClick={async () => {
+                    const vehs = Array.from(selectedVehiclesBulk).map(id => {
+                      const v = vehicles.find((x:any) => x.id === id);
+                      return { id, vehiclePlate: v?.registrationNo || v?.vehiclePlate || v?.plate || '' };
+                    });
+                    const selectedTargets: any[] = [];
+                    Array.from(selectedSitesVehicleBulk).forEach(siteId => selectedTargets.push({ locationId: siteId }));
+                    Array.from(selectedSubLevelsVehicleBulk).forEach(key => { const [siteId, subLevel] = key.split('::'); if (!selectedSitesVehicleBulk.has(siteId)) selectedTargets.push({ locationId: siteId, subLevelId: subLevel }); });
+                    if (selectedTargets.length === 0 || vehs.length === 0) { alert('Select at least one target and one vehicle'); return; }
+                    const assignments = selectedTargets.map(t => ({ locationId: t.locationId, subLevelId: t.subLevelId, vehicles: vehs }));
+                    try {
+                      const res = await fetch(`${API_BASE_URL}/site-locations/assign-vehicles?download=true`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assignments }) });
+                      if (!res.ok) throw new Error('Download failed');
+                      const blob = await res.blob();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a'); a.href = url; a.download = 'site-vehicles-assignments.pdf'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+                    } catch (err:any) { alert(err.message || 'Failed'); }
+                  }}>Download PDF</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

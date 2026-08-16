@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiFetch } from "../../../lib/api";
+import { apiFetch, API_BASE_URL } from "../../../lib/api";
 import {
   Plus, Search, Edit2, Trash2, X,
   Building2, MapPin, Phone, Calendar, Clock,
   FolderTree, AlertCircle, User, History
-} from "lucide-react";
+  , UserPlus } from "lucide-react";
 import Badge from "@/components/shared/Badge";
 
 const pad = (n: number, width = 4) => String(n).padStart(width, "0");
@@ -112,6 +112,17 @@ export type ManagerHistoryEntry = {
   changedAt: string;
 };
 
+export type AssignedPerson = {
+  id: string;
+  name: string;
+};
+
+export type AssignedVehicle = {
+  id: string;
+  vehiclePlate: string;
+  driver?: string;
+};
+
 type Site = {
   id: string;
   name: string;
@@ -125,6 +136,8 @@ type Site = {
   address: string;
   startDate: string;
   remarks: string;
+  assignedPersons: AssignedPerson[];
+  assignedVehicles: AssignedVehicle[];
 };
 
 type Location = {
@@ -162,6 +175,8 @@ function mapBackendLocation(location: any): Location {
         address: s.address || "",
         startDate: s.startDate ? s.startDate.split("T")[0] : "",
         remarks: s.remarks || "",
+        assignedPersons: Array.isArray(s.assignedPersons) ? s.assignedPersons.map((p: any) => ({ id: p.id || '', name: p.name || '' })) : [],
+        assignedVehicles: Array.isArray(s.assignedVehicles) ? s.assignedVehicles.map((v: any) => ({ id: v.id || '', vehiclePlate: v.vehiclePlate || v.registrationNo || '', driver: v.driver || '' })) : [],
       })),
   };
 }
@@ -175,6 +190,14 @@ function locationPayload(location: Partial<Location>) {
     // when absent (brand-new sites). The backend is the sole authority
     // on assigning/validating sub-level ids — see normalizeSubLevels()
     // in site-locations.service.ts. We never invent ids on the client.
+    //
+    // IMPORTANT: assignedPersons/assignedVehicles are included here so
+    // that a genuine edit (rename, manager change, etc.) round-trips
+    // without silently dropping assignments. The backend also carries
+    // these forward from the existing record if they're omitted, as a
+    // second line of defense — but sending them explicitly keeps the
+    // client and server in agreement about what "no assignment" means
+    // vs. "field not sent".
     subLevels: location.sites?.map((s) => ({
       ...(s.id ? { id: s.id } : {}),
       name: s.name,
@@ -188,6 +211,8 @@ function locationPayload(location: Partial<Location>) {
       address: s.address,
       startDate: s.startDate,
       remarks: s.remarks,
+      assignedPersons: s.assignedPersons || [],
+      assignedVehicles: s.assignedVehicles || [],
     })) || [],
   };
 }
@@ -217,6 +242,8 @@ const SEED_LOCATIONS: Location[] = [
         address: "1, Warehouse Road, Colombo 01",
         startDate: "2024-01-01",
         remarks: "Main warehouse",
+        assignedPersons: [],
+        assignedVehicles: [],
       }
     ],
   }
@@ -377,12 +404,22 @@ function LocationFormModal({ onClose, onSave, initial, isEdit = false }: any) {
 }
 
 // ─── Location Detail Panel (Renders Child Logs & History Accordions) ──────────
+//
+// `onUpdate` performs a genuine PUT to persist edits (add/edit/delete site,
+// change location fields). `onLocalUpdate` only updates React state in the
+// parent — no network call — and is used after the assign-people /
+// assign-vehicles endpoints, since those already persisted the change
+// server-side. Reusing `onUpdate` there was the bug: it fired a redundant
+// PUT that rebuilt subLevels and wiped the assignment that was just saved.
 
-function LocationDetailPanel({ location, onUpdate, onClose }: any) {
+function LocationDetailPanel({ location, onUpdate, onLocalUpdate, onClose }: any) {
   const color = getLocationColor(location.id);
   const [modal, setModal] = useState<
     { type: "add" } | { type: "edit"; site: Site } | { type: "delete"; site: Site } | null
   >(null);
+  const [showPeopleAssign, setShowPeopleAssign] = useState(false);
+  const [showVehiclesAssign, setShowVehiclesAssign] = useState(false);
+  const [assignSiteId, setAssignSiteId] = useState<string | null>(null);
 
   // Track open state for individual site histories in layout
   const [expandedHistories, setExpandedHistories] = useState<Record<string, boolean>>({});
@@ -401,6 +438,8 @@ function LocationDetailPanel({ location, onUpdate, onClose }: any) {
     const newSite = {
       ...data,
       managerHistory: [],
+      assignedPersons: [],
+      assignedVehicles: [],
     };
     await updateLocation({ sites: [...location.sites, newSite] });
     setModal(null);
@@ -449,7 +488,11 @@ function LocationDetailPanel({ location, onUpdate, onClose }: any) {
             <FolderTree size={16} className={color.accent} /> Sites
             <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${color.idChip}`}>{location.sites.length}</span>
           </h3>
-          <button onClick={() => setModal({ type: "add" })} className="btn btn-sm btn-primary"><Plus size={14} /> Add Site</button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowPeopleAssign(true)} className="btn btn-sm bg-blue-600 text-white hover:bg-blue-700"><User size={14} /> Bulk Assign People</button>
+            <button onClick={() => setShowVehiclesAssign(true)} className="btn btn-sm bg-purple-600 text-white hover:bg-purple-700"><Building2 size={14} /> Bulk Assign Vehicles</button>
+            <button onClick={() => setModal({ type: "add" })} className="btn btn-sm btn-primary"><Plus size={14} /> Add Site</button>
+          </div>
         </div>
 
         {location.sites.length === 0 ? (
@@ -496,6 +539,20 @@ function LocationDetailPanel({ location, onUpdate, onClose }: any) {
                         {site.remarks && <div className="col-span-2"><span className="font-medium">Remarks:</span> {site.remarks}</div>}
                       </div>
 
+                      {site.assignedPersons && site.assignedPersons.length > 0 && (
+                        <div className="mt-3 text-sm text-slate-600">
+                          <div className="font-medium text-slate-700">Assigned People:</div>
+                          <div className="text-sm text-slate-500">{site.assignedPersons.map((p:any)=>p.name).join(', ')}</div>
+                        </div>
+                      )}
+
+                      {site.assignedVehicles && site.assignedVehicles.length > 0 && (
+                        <div className="mt-2 text-sm text-slate-600">
+                          <div className="font-medium text-slate-700">Assigned Vehicles:</div>
+                          <div className="text-sm text-slate-500">{site.assignedVehicles.map((v:any)=>v.vehiclePlate || v.id).join(', ')}</div>
+                        </div>
+                      )}
+
                       {/* Expanded Section for History Timeline */}
                       {isHistoryOpen && site.managerHistory && site.managerHistory.length > 0 && (
                         <div className="mt-3 pt-3 border-t border-dashed border-slate-200 bg-white/70 p-2.5 rounded-lg">
@@ -516,6 +573,7 @@ function LocationDetailPanel({ location, onUpdate, onClose }: any) {
                       )}
                     </div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition flex-shrink-0 ml-2">
+                      <button onClick={() => { setAssignSiteId(site.id || null); setShowPeopleAssign(true); }} title="Assign person" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><UserPlus size={14} /></button>
                       <button onClick={() => setModal({ type: "edit", site })} className="p-1.5 rounded-lg hover:bg-white text-slate-500"><Edit2 size={14} /></button>
                       <button onClick={() => setModal({ type: "delete", site })} className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-500"><Trash2 size={14} /></button>
                     </div>
@@ -530,6 +588,63 @@ function LocationDetailPanel({ location, onUpdate, onClose }: any) {
       {modal?.type === "add" && <SiteModal title="Add Site" initial={{ name: "", manager: "", managerHistory: [], region: REGIONS[0], client: "", contactNumber: "", address: "", startDate: new Date().toISOString().slice(0, 10), status: "Planning", remarks: "" }} onClose={() => setModal(null)} onSave={handleAddSite} />}
       {modal?.type === "edit" && <SiteModal title="Edit Site" initial={modal.site} onClose={() => setModal(null)} onSave={handleEditSite} />}
       {modal?.type === "delete" && <ConfirmModal name={modal.site.name} onClose={() => setModal(null)} onConfirm={handleDeleteSite} />}
+
+      {showPeopleAssign && (
+        <Modal title="Bulk Assign People" onClose={() => { setShowPeopleAssign(false); setAssignSiteId(null); }}>
+          <AssignPeopleForm
+            sites={location.sites}
+            locationId={location.id}
+            initialSiteId={assignSiteId}
+            onClose={() => { setShowPeopleAssign(false); setAssignSiteId(null); }}
+              onAssigned={async (assignments?: any[]) => {
+                if (Array.isArray(assignments)) {
+                  // Assignment was already persisted by /assign-people.
+                  // Just reflect it in local state — do NOT go through
+                  // onUpdate (that fires a PUT that rebuilds subLevels
+                  // and would strip this exact data back out).
+                  const updated = { ...location, sites: location.sites.map((s: any) => {
+                    const match = assignments.find(a => a.locationId === location.id && a.subLevelId === s.id);
+                    return match ? { ...s, assignedPersons: Array.isArray(match.persons) ? match.persons : [] } : s;
+                  }) };
+                  onLocalUpdate && onLocalUpdate(updated);
+                  return;
+                }
+                // fallback: fetch refreshed from server, again only a local sync
+                const refreshed = await apiFetch('/site-locations');
+                if (Array.isArray(refreshed)) {
+                  const match = refreshed.find((r: any) => r.id === location.id);
+                  if (match) onLocalUpdate && onLocalUpdate(mapBackendLocation(match));
+                }
+              }}
+          />
+        </Modal>
+      )}
+
+      {showVehiclesAssign && (
+        <Modal title="Bulk Assign Vehicles" onClose={() => setShowVehiclesAssign(false)}>
+          <AssignVehiclesForm
+            sites={location.sites}
+            locationId={location.id}
+            onClose={() => setShowVehiclesAssign(false)}
+            onAssigned={async (assignments?: any[]) => {
+              if (Array.isArray(assignments)) {
+                // Same reasoning as above — local sync only, already persisted.
+                const updated = { ...location, sites: location.sites.map((s: any) => {
+                  const match = assignments.find(a => a.locationId === location.id && a.subLevelId === s.id);
+                  return match ? { ...s, assignedVehicles: Array.isArray(match.vehicles) ? match.vehicles : [] } : s;
+                }) };
+                onLocalUpdate && onLocalUpdate(updated);
+                return;
+              }
+              const refreshed = await apiFetch('/site-locations');
+              if (Array.isArray(refreshed)) {
+                const match = refreshed.find((r: any) => r.id === location.id);
+                if (match) onLocalUpdate && onLocalUpdate(mapBackendLocation(match));
+              }
+            }}
+          />
+        </Modal>
+      )}
     </div>
   );
 }
@@ -599,6 +714,13 @@ export default function LocationManagementPage() {
     } catch (error: any) {
       setApiError(error?.message || "Unable to update location.");
     }
+  };
+
+  // Pure local state sync — no network call. Used after actions (like
+  // bulk-assign) that already persisted their change through a dedicated
+  // endpoint, so we just need the UI to reflect the new state.
+  const handleLocalUpdateLocation = (updated: Location) => {
+    setLocations((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
   };
 
   const handleDeleteLocation = async (id: string) => {
@@ -687,7 +809,12 @@ export default function LocationManagementPage() {
       {/* ── Right: Detail panel ── */}
       <div className="flex-1 min-w-0">
         {selectedLocation ? (
-          <LocationDetailPanel location={selectedLocation} onUpdate={handleUpdateLocation} onClose={() => setSelectedLocationId(null)} />
+          <LocationDetailPanel
+            location={selectedLocation}
+            onUpdate={handleUpdateLocation}
+            onLocalUpdate={handleLocalUpdateLocation}
+            onClose={() => setSelectedLocationId(null)}
+          />
         ) : (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm h-full flex flex-col items-center justify-center text-slate-400">
             <Building2 size={48} className="mb-3 opacity-30" />
@@ -700,6 +827,167 @@ export default function LocationManagementPage() {
       {showAddLocation && <LocationFormModal onClose={() => setShowAddLocation(false)} onSave={handleAddLocation} />}
       {editLocation && <LocationFormModal isEdit initial={editLocation} onClose={() => setEditLocation(null)} onSave={async (data: any) => { await handleUpdateLocation({ ...editLocation, ...data }); setEditLocation(null); }} />}
       {deleteLocationTarget && <ConfirmModal name={deleteLocationTarget.name} onClose={() => setDeleteLocationTarget(null)} onConfirm={() => handleDeleteLocation(deleteLocationTarget.id)} />}
+    </div>
+  );
+}
+
+// ─── Bulk Assign Forms (used by LocationDetailPanel) ─────────────────────
+function AssignPeopleForm({ sites, onClose, onAssigned, initialSiteId, locationId }: any) {
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [selectedSites, setSelectedSites] = useState<Set<string>>(new Set());
+  const [selectedPersons, setSelectedPersons] = useState<Set<string>>(new Set());
+  const [banner, setBanner] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  useEffect(() => { (async () => { try { const res = await apiFetch('/employees'); if (Array.isArray(res)) setEmployees(res); } catch {} })(); }, []);
+
+  // If an initial site was provided (single-site assign), preselect it
+  useEffect(() => {
+    if (initialSiteId) {
+      setSelectedSites(new Set([initialSiteId]));
+    }
+  }, [initialSiteId]);
+
+  const toggleSite = (id: string) => { const s = new Set(selectedSites); s.has(id) ? s.delete(id) : s.add(id); setSelectedSites(s); };
+  const togglePerson = (id: string) => { const s = new Set(selectedPersons); s.has(id) ? s.delete(id) : s.add(id); setSelectedPersons(s); };
+
+  const handleAssign = async (download = false) => {
+    const persons = Array.from(selectedPersons).map(id => { const e = employees.find((x:any)=>x.id===id); return { id, name: e?.fullName || e?.name || '' }; });
+    // selectedSites are sub-level ids; include parent locationId and subLevelId
+    const targets = Array.from(selectedSites).map(subLevelId => ({ locationId: locationId || '', subLevelId }));
+    if (persons.length === 0 || targets.length === 0) { setBanner({ type: 'error', message: 'Select at least one site and one person' }); return; }
+    const assignments = targets.map(t => ({ locationId: t.locationId, subLevelId: t.subLevelId, persons }));
+    try {
+      if (!download) {
+        await apiFetch('/site-locations/assign-people', { method: 'POST', body: JSON.stringify({ assignments }) });
+        setBanner({ type: 'success', message: 'People assigned' });
+        await new Promise((r) => setTimeout(r, 700));
+        onAssigned && onAssigned(assignments);
+        onClose();
+        return;
+      }
+
+      // Download flow: try known base URLs until a blob is returned
+      const candidates = [API_BASE_URL, 'http://localhost:5001/api', 'http://localhost:5002/api'];
+      let ok = false;
+      for (const base of candidates) {
+        try {
+          const resp = await fetch(`${base}/site-locations/assign-people?download=true`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assignments }) });
+          if (!resp.ok) continue;
+          const blob = await resp.blob();
+          const u = URL.createObjectURL(blob);
+          const a = document.createElement('a'); a.href = u; a.download = 'site-people-assignments.pdf'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(u);
+          ok = true; break;
+        } catch (e) {
+          console.warn('download try failed', base, e);
+        }
+      }
+      if (!ok) throw new Error('Download failed (no reachable API)');
+      setBanner({ type: 'success', message: 'PDF downloaded' });
+      await new Promise((r) => setTimeout(r, 700));
+      onClose();
+    } catch (err:any) { console.error(err); setBanner({ type: 'error', message: err?.message || 'Failed' }); }
+  };
+
+  return (
+    <div>
+      {banner && (
+        <div className={`mb-3 p-2 rounded border ${banner.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`}>
+          <div className="flex justify-between items-center text-sm">
+            <div>{banner.message}</div>
+            <button onClick={() => setBanner(null)} className="text-xs opacity-70">Close</button>
+          </div>
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <p className="text-sm font-semibold mb-2">Select Site</p>
+          <div className="max-h-64 overflow-auto border rounded p-2">
+            {sites.map((s:any)=> (
+              <div key={s.id} className="mb-2"><label><input type="checkbox" checked={selectedSites.has(s.id)} onChange={()=>toggleSite(s.id)} className="mr-2" /> {s.name} ({s.id})</label></div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="text-sm font-semibold mb-2">Select People</p>
+          <div className="max-h-64 overflow-auto border rounded p-2">
+            {employees.map((e:any)=> (<div key={e.id} className="mb-1"><label><input type="checkbox" checked={selectedPersons.has(e.id)} onChange={()=>togglePerson(e.id)} className="mr-2" /> {e.fullName || e.name}</label></div>))}
+          </div>
+        </div>
+      </div>
+      <div className="flex justify-end gap-2 mt-4">
+        <button className="btn" onClick={() => handleAssign(false)}>Assign</button>
+        <button className="btn" onClick={() => handleAssign(true)}>Download PDF</button>
+      </div>
+    </div>
+  );
+}
+
+function AssignVehiclesForm({ sites, onClose, onAssigned, locationId }: any) {
+  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [selectedSites, setSelectedSites] = useState<Set<string>>(new Set());
+  const [selectedVehicles, setSelectedVehicles] = useState<Set<string>>(new Set());
+  const [banner, setBanner] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  useEffect(() => { (async () => { try { const res = await apiFetch('/vehicles'); if (Array.isArray(res)) setVehicles(res); } catch {} })(); }, []);
+  const toggleSite = (id: string) => { const s = new Set(selectedSites); s.has(id) ? s.delete(id) : s.add(id); setSelectedSites(s); };
+  const toggleVehicle = (id: string) => { const s = new Set(selectedVehicles); s.has(id) ? s.delete(id) : s.add(id); setSelectedVehicles(s); };
+  const handleAssign = async (download = false) => {
+    const vehs = Array.from(selectedVehicles).map(id => { const v = vehicles.find((x:any)=>x.id===id); return { id, vehiclePlate: v?.registrationNo || v?.vehiclePlate || '' }; });
+    // selectedSites are sub-level ids; include parent locationId and subLevelId
+    const targets = Array.from(selectedSites).map(subLevelId => ({ locationId: locationId || '', subLevelId }));
+    if (vehs.length === 0 || targets.length === 0) { setBanner({ type: 'error', message: 'Select at least one site and one vehicle' }); return; }
+    const assignments = targets.map(t => ({ locationId: t.locationId, subLevelId: t.subLevelId, vehicles: vehs }));
+    try {
+      if (!download) {
+        await apiFetch('/site-locations/assign-vehicles', { method: 'POST', body: JSON.stringify({ assignments }) });
+        setBanner({ type: 'success', message: 'Vehicles assigned' });
+        await new Promise((r) => setTimeout(r, 700));
+        onAssigned && onAssigned(assignments);
+        onClose();
+        return;
+      }
+      const candidates = [API_BASE_URL, 'http://localhost:5001/api', 'http://localhost:5002/api'];
+      let ok = false;
+      for (const base of candidates) {
+        try {
+          const resp = await fetch(`${base}/site-locations/assign-vehicles?download=true`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assignments }) });
+          if (!resp.ok) continue;
+          const blob = await resp.blob(); const u = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = u; a.download = 'site-vehicles-assignments.pdf'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(u);
+          ok = true; break;
+        } catch (e) { console.warn('download try failed', base, e); }
+      }
+      if (!ok) throw new Error('Download failed (no reachable API)');
+      setBanner({ type: 'success', message: 'PDF downloaded' });
+      await new Promise((r) => setTimeout(r, 700));
+      onClose();
+    } catch (err:any) { setBanner({ type: 'error', message: err?.message || 'Failed' }); }
+  };
+  return (
+    <div>
+      {banner && (
+        <div className={`mb-3 p-2 rounded border ${banner.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`}>
+          <div className="flex justify-between items-center text-sm">
+            <div>{banner.message}</div>
+            <button onClick={() => setBanner(null)} className="text-xs opacity-70">Close</button>
+          </div>
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <p className="text-sm font-semibold mb-2">Select Site</p>
+          <div className="max-h-64 overflow-auto border rounded p-2">
+            {sites.map((s:any)=> (<div key={s.id} className="mb-2"><label><input type="checkbox" checked={selectedSites.has(s.id)} onChange={()=>toggleSite(s.id)} className="mr-2" /> {s.name} ({s.id})</label></div>))}
+          </div>
+        </div>
+        <div>
+          <p className="text-sm font-semibold mb-2">Select Vehicles</p>
+          <div className="max-h-64 overflow-auto border rounded p-2">
+            {vehicles.map((v:any)=> (<div key={v.id} className="mb-1"><label><input type="checkbox" checked={selectedVehicles.has(v.id)} onChange={()=>toggleVehicle(v.id)} className="mr-2" /> {v.registrationNo || v.vehiclePlate || v.plate || v.id}</label></div>))}
+          </div>
+        </div>
+      </div>
+      <div className="flex justify-end gap-2 mt-4">
+        <button className="btn" onClick={() => handleAssign(false)}>Assign</button>
+        <button className="btn" onClick={() => handleAssign(true)}>Download PDF</button>
+      </div>
     </div>
   );
 }

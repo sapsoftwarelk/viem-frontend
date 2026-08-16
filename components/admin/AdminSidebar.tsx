@@ -128,13 +128,7 @@ const navSections: NavSection[] = [
           },
         ],
       },
-      {
-        label: "Site Task Manager",
-        shortName: "STM",
-        href: "/admin/stm",
-        icon: Folder,
-        tooltip: "Assign and monitor operational tasks across all active project sites.",
-      },
+      
     ],
   },
 

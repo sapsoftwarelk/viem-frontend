@@ -7,6 +7,7 @@ import {
   Plus, Search, Edit2, Trash2, X, Calendar,
   Package, Building2, FileText, ChevronDown,
   Check, ArrowRight, Home, AlertTriangle, List,
+  Users, Car,
 } from "lucide-react";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -59,6 +60,10 @@ type TransferNote = {
   transferDate: string;
   remarks: string;
   items: TransferItem[];
+  sentBy?: string;
+  receivedBy?: string;
+  vehicleId?: string;
+  vehiclePlate?: string;
 };
 
 // ─── Sample data ──────────────────────────────────────────────────────────
@@ -109,6 +114,10 @@ function normalizeTransferNote(note: any, fallbackIndex = 0): TransferNote {
     transferDate: textValue(note?.transferDate, new Date().toISOString().slice(0, 10)),
     remarks: textValue(note?.remarks),
     items: items.map(normalizeTransferItem),
+    sentBy: textValue(note?.sentBy || note?.sentByName || note?.sent_by),
+    receivedBy: textValue(note?.receivedBy || note?.receivedByName || note?.received_by),
+    vehicleId: extractRefId(note?.vehicleId || note?.vehicle),
+    vehiclePlate: textValue(note?.vehiclePlate || note?.vehiclePlateText || (note?.vehicle && note.vehicle.plate) ),
   };
 }
 
@@ -452,6 +461,8 @@ function TransferNoteFormModal({
   isEdit = false,
   locations,
   availableItems = [],
+  availablePersons = [],
+  vehicles = [],
 }: any) {
   const defaultItems =
     initial?.items?.length
@@ -467,6 +478,9 @@ function TransferNoteFormModal({
       transferDate: new Date().toISOString().slice(0, 10),
       remarks: "",
       items: defaultItems,
+      sentBy: "",
+      receivedBy: "",
+      vehicleId: "",
     }
   );
 
@@ -549,6 +563,10 @@ function TransferNoteFormModal({
   );
 
   const itemOptions = getItemOptions(availableItems);
+
+  // person and vehicle helpers (optional)
+  const personOptions = (availablePersons || []).map((p: any) => p.label);
+  const vehicleOptions = (vehicles || []).map((v: any) => `${v.plate || v.vehiclePlate || v.name || v.id}`);
 
   return (
     <Modal
@@ -661,6 +679,43 @@ function TransferNoteFormModal({
             onChange={(e) => handleChange("transferDate", e.target.value)}
             className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
           />
+        </div>
+
+        {/* ── Persons & Vehicle ── */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-semibold text-slate-600 mb-1.5">Sent By</label>
+            <Combobox
+              options={personOptions}
+              value={form.sentBy || ""}
+              onChange={(val) => handleChange("sentBy", val)}
+              placeholder={personOptions.length ? "Search or select sender..." : "Type sender name..."}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-600 mb-1.5">Received By</label>
+            <Combobox
+              options={personOptions}
+              value={form.receivedBy || ""}
+              onChange={(val) => handleChange("receivedBy", val)}
+              placeholder={personOptions.length ? "Search or select receiver..." : "Type receiver name..."}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-600 mb-1.5">Assign Vehicle</label>
+            <select
+              value={form.vehicleId || ""}
+              onChange={(e) => handleChange("vehicleId", e.target.value)}
+              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            >
+              <option value="">No vehicle</option>
+              {(vehicles || []).map((v: any) => (
+                <option key={v.id || v.vehicleId || v._id} value={v.id || v.vehicleId || v._id}>
+                  {v.plate || v.vehiclePlate || v.vehiclePlateText || v.name || v.id}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* ── Items (card-per-row, portal combobox) ── */}
@@ -832,7 +887,7 @@ function TransferNoteFormModal({
 }
 
 // ─── Detail Panel ──────────────────────────────────────────────────────────
-function TransferNoteDetail({ note, onUpdate, onClose, locations, availableItems }: any) {
+function TransferNoteDetail({ note, onUpdate, onClose, locations, availableItems, availablePersons = [], vehicles = [] }: any) {
   const color = getNoteColor(note.id);
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
@@ -927,6 +982,31 @@ function TransferNoteDetail({ note, onUpdate, onClose, locations, availableItems
           </div>
         </div>
 
+        {/* Persons / Vehicle grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="flex items-start gap-3">
+            <Users size={18} className="text-slate-400 mt-1 flex-shrink-0" />
+            <div>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sent By</p>
+              <p className="text-slate-700 font-medium">{note.sentBy || "—"}</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <Users size={18} className="text-slate-400 mt-1 flex-shrink-0" />
+            <div>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Received By</p>
+              <p className="text-slate-700 font-medium">{note.receivedBy || "—"}</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <Car size={18} className="text-slate-400 mt-1 flex-shrink-0" />
+            <div>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Vehicle</p>
+              <p className="text-slate-700 font-medium">{note.vehiclePlate || note.vehicleId || "—"}</p>
+            </div>
+          </div>
+        </div>
+
         {/* Items table */}
         <div className="border-t border-slate-100 pt-4">
           <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
@@ -994,6 +1074,8 @@ function TransferNoteDetail({ note, onUpdate, onClose, locations, availableItems
           initial={note}
           locations={locations}
           availableItems={availableItems}
+          availablePersons={availablePersons}
+          vehicles={vehicles}
           onClose={() => setShowEdit(false)}
           onSave={(data: any) => {
             onUpdate({ ...note, ...data });
@@ -1020,6 +1102,8 @@ export default function TransferNotesPage() {
   const [notes, setNotes] = useState<TransferNote[]>(SEED_NOTES);
   const [locations, setLocations] = useState<Location[]>(SAMPLE_LOCATIONS);
   const [availableItems, setAvailableItems] = useState<AvailableItem[]>([]);
+  const [availablePersons, setAvailablePersons] = useState<any[]>([]);
+  const [vehicles, setVehicles] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [apiError, setApiError] = useState("");
@@ -1031,15 +1115,19 @@ export default function TransferNotesPage() {
       try {
         setLoading(true);
         setApiError("");
-        const [notesResult, locResult, itemsResult] = await Promise.allSettled([
+        const [notesResult, locResult, itemsResult, employeesResult, vehiclesResult] = await Promise.allSettled([
           apiFetch("/transfer-notes"),
           apiFetch("/site-locations"),
           apiFetch("/items"),
+          apiFetch("/employees"),
+          apiFetch("/vehicles"),
         ]);
 
         const notesData = notesResult.status === "fulfilled" ? notesResult.value : null;
         const locData = locResult.status === "fulfilled" ? locResult.value : null;
         const itemsData = itemsResult.status === "fulfilled" ? itemsResult.value : null;
+        const employeesData = employeesResult.status === "fulfilled" ? employeesResult.value : null;
+        const vehiclesData = vehiclesResult.status === "fulfilled" ? vehiclesResult.value : null;
 
         if (Array.isArray(notesData) && notesData.length > 0) {
           const mappedNotes = notesData.map(normalizeTransferNote);
@@ -1066,6 +1154,24 @@ export default function TransferNotesPage() {
         if (Array.isArray(itemsData) && itemsData.length > 0) {
           const mappedItems = mapInventoryOptions(itemsData);
           setAvailableItems(mappedItems);
+        }
+        if (Array.isArray(employeesData)) {
+          const mappedPersons = employeesData
+            .map((entry: any) => {
+              const name = String(
+                entry?.fullName || entry?.name ||
+                [entry?.firstName, entry?.lastName].filter(Boolean).join(" ") || ""
+              ).trim();
+              const id = String(entry?.id || "").trim();
+              const role = entry?.role?.name || entry?.designation || entry?.jobTitle;
+              const label = role ? `${name} (${role})` : name;
+              return name && id ? { id, name, label } : null;
+            })
+            .filter(Boolean);
+          setAvailablePersons(mappedPersons);
+        }
+        if (Array.isArray(vehiclesData)) {
+          setVehicles(vehiclesData);
         }
         const failures = [notesResult, locResult, itemsResult].filter((result) => result.status === "rejected");
         if (failures.length > 0) {
@@ -1245,6 +1351,8 @@ export default function TransferNotesPage() {
             note={selectedNote}
             locations={locations}
             availableItems={availableItems}
+            availablePersons={availablePersons}
+            vehicles={vehicles}
             onUpdate={handleUpdate}
             onClose={() => setSelectedId(null)}
           />
@@ -1260,12 +1368,14 @@ export default function TransferNotesPage() {
 
       {/* ── Add modal ── */}
       {showAdd && (
-        <TransferNoteFormModal
-          locations={locations}
-          availableItems={availableItems}
-          onClose={() => setShowAdd(false)}
-          onSave={handleCreate}
-        />
+          <TransferNoteFormModal
+            locations={locations}
+            availableItems={availableItems}
+            availablePersons={availablePersons}
+            vehicles={vehicles}
+            onClose={() => setShowAdd(false)}
+            onSave={handleCreate}
+          />
       )}
     </div>
   );
