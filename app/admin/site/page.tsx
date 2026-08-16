@@ -6,7 +6,7 @@ import {
   Plus, Search, Edit2, Trash2, X,
   Building2, MapPin, Phone, Calendar, Clock,
   FolderTree, AlertCircle, User, History
-  , UserPlus } from "lucide-react";
+  , UserPlus, Download } from "lucide-react";
 import Badge from "@/components/shared/Badge";
 
 const pad = (n: number, width = 4) => String(n).padStart(width, "0");
@@ -217,6 +217,33 @@ function locationPayload(location: Partial<Location>) {
   };
 }
 
+// ─── Shared file-download helper ──────────────────────────────────────────────
+// Tries the configured API base first, then a couple of common local dev
+// ports as a fallback — mirrors the pattern already used by the bulk-assign
+// "Download PDF" buttons, kept in one place so the report buttons share it.
+async function downloadPdf(path: string, filename: string): Promise<boolean> {
+  const candidates = [API_BASE_URL, "http://localhost:5001/api", "http://localhost:5002/api"];
+  for (const base of candidates) {
+    try {
+      const resp = await fetch(`${base}${path}`);
+      if (!resp.ok) continue;
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      return true;
+    } catch (e) {
+      console.warn("report download try failed", base, e);
+    }
+  }
+  return false;
+}
+
 // ─── Sample seed data with historical records ────────────────────────────────
 
 const SEED_LOCATIONS: Location[] = [
@@ -420,6 +447,17 @@ function LocationDetailPanel({ location, onUpdate, onLocalUpdate, onClose }: any
   const [showPeopleAssign, setShowPeopleAssign] = useState(false);
   const [showVehiclesAssign, setShowVehiclesAssign] = useState(false);
   const [assignSiteId, setAssignSiteId] = useState<string | null>(null);
+  const [downloadingReport, setDownloadingReport] = useState(false);
+
+  const handleDownloadReport = async () => {
+    setDownloadingReport(true);
+    try {
+      const ok = await downloadPdf(`/site-locations/${location.id}/report`, `${location.id}-report.pdf`);
+      if (!ok) alert("Couldn't generate the report. Please check your connection and try again.");
+    } finally {
+      setDownloadingReport(false);
+    }
+  };
 
   // Track open state for individual site histories in layout
   const [expandedHistories, setExpandedHistories] = useState<Record<string, boolean>>({});
@@ -479,7 +517,16 @@ function LocationDetailPanel({ location, onUpdate, onLocalUpdate, onClose }: any
             <p className={`text-sm font-medium ${color.accent} mt-0.5`}>{location.region}</p>
           </div>
         </div>
-        <button onClick={onClose} className="p-1 rounded-lg hover:bg-white/70 text-slate-400"><X size={18} /></button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleDownloadReport}
+            disabled={downloadingReport}
+            className={`btn btn-sm bg-slate-800 text-white hover:bg-slate-900 ${downloadingReport ? "opacity-60 cursor-wait" : ""}`}
+          >
+            <Download size={14} /> {downloadingReport ? "Preparing..." : "Download Report"}
+          </button>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-white/70 text-slate-400"><X size={18} /></button>
+        </div>
       </div>
 
       <div className="flex-1 p-6 flex flex-col overflow-hidden">
@@ -661,6 +708,17 @@ export default function LocationManagementPage() {
   const [showAddLocation, setShowAddLocation] = useState(false);
   const [editLocation, setEditLocation] = useState<Location | null>(null);
   const [deleteLocationTarget, setDeleteLocationTarget] = useState<Location | null>(null);
+  const [downloadingAllReport, setDownloadingAllReport] = useState(false);
+
+  const handleDownloadAllReport = async () => {
+    setDownloadingAllReport(true);
+    try {
+      const ok = await downloadPdf(`/site-locations/reports/all`, `site-locations-report.pdf`);
+      if (!ok) setApiError("Couldn't generate the full report. Please check your connection and try again.");
+    } finally {
+      setDownloadingAllReport(false);
+    }
+  };
 
   useEffect(() => {
     const loadLocations = async () => {
@@ -759,7 +817,17 @@ export default function LocationManagementPage() {
               </button>
             ))}
           </div>
-          <button onClick={() => setShowAddLocation(true)} className="btn btn-primary w-full mt-4"><Plus size={14} /> New Location</button>
+          <div className="flex gap-2 mt-4">
+            <button onClick={() => setShowAddLocation(true)} className="btn btn-primary flex-1"><Plus size={14} /> New Location</button>
+            <button
+              onClick={handleDownloadAllReport}
+              disabled={downloadingAllReport}
+              title="Download a detailed PDF report for every location"
+              className={`btn bg-slate-800 text-white hover:bg-slate-900 ${downloadingAllReport ? "opacity-60 cursor-wait" : ""}`}
+            >
+              <Download size={14} /> {downloadingAllReport ? "..." : "Download All"}
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
