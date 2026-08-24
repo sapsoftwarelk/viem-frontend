@@ -5,8 +5,9 @@ import { apiFetch, API_BASE_URL } from "../../../lib/api";
 import {
   Plus, Search, Edit2, Trash2, X,
   Building2, MapPin, Phone, Calendar, Clock,
-  FolderTree, AlertCircle, User, History
-  , UserPlus, Download } from "lucide-react";
+  FolderTree, AlertCircle, User, History, Users,
+  Download, UserX, Truck, ArrowRightLeft, HistoryIcon
+} from "lucide-react";
 import Badge from "@/components/shared/Badge";
 
 const pad = (n: number, width = 4) => String(n).padStart(width, "0");
@@ -28,64 +29,64 @@ const STATUS_STYLES: Record<string, "green" | "amber" | "gray" | "blue" | "red">
 // ─── Color palette ────────────────────────────────────────────────────────────
 const LOCATION_COLORS = [
   {
-    dot:        "bg-violet-500",
-    ring:       "ring-violet-300",
-    border:     "border-violet-300",
-    cardBg:     "bg-violet-50/40",
-    headerBg:   "bg-violet-50",
-    headerBorder:"border-violet-200",
-    avatarBg:   "bg-violet-500",
-    avatarText:  "text-white",
-    accent:     "text-violet-600",
-    activeCard: "border-violet-400 bg-violet-50/50",
-    filterActive:"bg-violet-600",
-    idChip:     "bg-violet-100 text-violet-700",
-    subBorder:  "border-violet-100",
+    dot:          "bg-violet-500",
+    ring:         "ring-violet-300",
+    border:       "border-violet-300",
+    cardBg:       "bg-violet-50/40",
+    headerBg:     "bg-violet-50",
+    headerBorder: "border-violet-200",
+    avatarBg:     "bg-violet-500",
+    avatarText:   "text-white",
+    accent:       "text-violet-600",
+    activeCard:   "border-violet-400 bg-violet-50/50",
+    filterActive: "bg-violet-600",
+    idChip:       "bg-violet-100 text-violet-700",
+    subBorder:    "border-violet-100",
   },
   {
-    dot:        "bg-sky-500",
-    ring:       "ring-sky-300",
-    border:     "border-sky-300",
-    cardBg:     "bg-sky-50/40",
-    headerBg:   "bg-sky-50",
-    headerBorder:"border-sky-200",
-    avatarBg:   "bg-sky-500",
-    avatarText:  "text-white",
-    accent:     "text-sky-600",
-    activeCard: "border-sky-400 bg-sky-50/50",
-    filterActive:"bg-sky-600",
-    idChip:     "bg-sky-100 text-sky-700",
-    subBorder:  "border-sky-100",
+    dot:          "bg-sky-500",
+    ring:         "ring-sky-300",
+    border:       "border-sky-300",
+    cardBg:       "bg-sky-50/40",
+    headerBg:     "bg-sky-50",
+    headerBorder: "border-sky-200",
+    avatarBg:     "bg-sky-500",
+    avatarText:   "text-white",
+    accent:       "text-sky-600",
+    activeCard:   "border-sky-400 bg-sky-50/50",
+    filterActive: "bg-sky-600",
+    idChip:       "bg-sky-100 text-sky-700",
+    subBorder:    "border-sky-100",
   },
   {
-    dot:        "bg-emerald-500",
-    ring:       "ring-emerald-300",
-    border:     "border-emerald-300",
-    cardBg:     "bg-emerald-50/40",
-    headerBg:   "bg-emerald-50",
-    headerBorder:"border-emerald-200",
-    avatarBg:   "bg-emerald-500",
-    avatarText:  "text-white",
-    accent:     "text-emerald-600",
-    activeCard: "border-emerald-400 bg-emerald-50/50",
-    filterActive:"bg-emerald-600",
-    idChip:     "bg-emerald-100 text-emerald-700",
-    subBorder:  "border-emerald-100",
+    dot:          "bg-emerald-500",
+    ring:         "ring-emerald-300",
+    border:       "border-emerald-300",
+    cardBg:       "bg-emerald-50/40",
+    headerBg:     "bg-emerald-50",
+    headerBorder: "border-emerald-200",
+    avatarBg:     "bg-emerald-500",
+    avatarText:   "text-white",
+    accent:       "text-emerald-600",
+    activeCard:   "border-emerald-400 bg-emerald-50/50",
+    filterActive: "bg-emerald-600",
+    idChip:       "bg-emerald-100 text-emerald-700",
+    subBorder:    "border-emerald-100",
   },
   {
-    dot:        "bg-rose-500",
-    ring:       "ring-rose-300",
-    border:     "border-rose-300",
-    cardBg:     "bg-rose-50/40",
-    headerBg:   "bg-rose-50",
-    headerBorder:"border-rose-200",
-    avatarBg:   "bg-rose-500",
-    avatarText:  "text-white",
-    accent:     "text-rose-600",
-    activeCard: "border-rose-400 bg-rose-50/50",
-    filterActive:"bg-rose-600",
-    idChip:     "bg-rose-100 text-rose-700",
-    subBorder:  "border-rose-100",
+    dot:          "bg-rose-500",
+    ring:         "ring-rose-300",
+    border:       "border-rose-300",
+    cardBg:       "bg-rose-50/40",
+    headerBg:     "bg-rose-50",
+    headerBorder: "border-rose-200",
+    avatarBg:     "bg-rose-500",
+    avatarText:   "text-white",
+    accent:       "text-rose-600",
+    activeCard:   "border-rose-400 bg-rose-50/50",
+    filterActive: "bg-rose-600",
+    idChip:       "bg-rose-100 text-rose-700",
+    subBorder:    "border-rose-100",
   },
 ];
 
@@ -148,7 +149,7 @@ type Location = {
   sites: Site[];
 };
 
-// ─── Data helpers (back‑end mapping) ──────────────────────────────────────
+// ─── Data helpers ──────────────────────────────────────────────────────────────
 
 function mapBackendLocation(location: any): Location {
   const sites = Array.isArray(location.subLevels) ? location.subLevels : [];
@@ -158,9 +159,6 @@ function mapBackendLocation(location: any): Location {
     status: location.status || "Planning",
     region: location.region || "",
     sites: sites
-      // Defensive: never let an id-less record from the backend reach the UI.
-      // The backend now guarantees ids on write, but old rows created before
-      // that fix may still be missing one — skip them rather than crash.
       .filter((s: any) => !!s?.id)
       .map((s: any) => ({
         id: s.id,
@@ -175,8 +173,8 @@ function mapBackendLocation(location: any): Location {
         address: s.address || "",
         startDate: s.startDate ? s.startDate.split("T")[0] : "",
         remarks: s.remarks || "",
-        assignedPersons: Array.isArray(s.assignedPersons) ? s.assignedPersons.map((p: any) => ({ id: p.id || '', name: p.name || '' })) : [],
-        assignedVehicles: Array.isArray(s.assignedVehicles) ? s.assignedVehicles.map((v: any) => ({ id: v.id || '', vehiclePlate: v.vehiclePlate || v.registrationNo || '', driver: v.driver || '' })) : [],
+        assignedPersons: [],
+        assignedVehicles: [],
       })),
   };
 }
@@ -186,18 +184,6 @@ function locationPayload(location: Partial<Location>) {
     siteName: location.name,
     status: location.status,
     region: location.region,
-    // Note: `id` is included when present (existing sites) and omitted
-    // when absent (brand-new sites). The backend is the sole authority
-    // on assigning/validating sub-level ids — see normalizeSubLevels()
-    // in site-locations.service.ts. We never invent ids on the client.
-    //
-    // IMPORTANT: assignedPersons/assignedVehicles are included here so
-    // that a genuine edit (rename, manager change, etc.) round-trips
-    // without silently dropping assignments. The backend also carries
-    // these forward from the existing record if they're omitted, as a
-    // second line of defense — but sending them explicitly keeps the
-    // client and server in agreement about what "no assignment" means
-    // vs. "field not sent".
     subLevels: location.sites?.map((s) => ({
       ...(s.id ? { id: s.id } : {}),
       name: s.name,
@@ -211,16 +197,10 @@ function locationPayload(location: Partial<Location>) {
       address: s.address,
       startDate: s.startDate,
       remarks: s.remarks,
-      assignedPersons: s.assignedPersons || [],
-      assignedVehicles: s.assignedVehicles || [],
     })) || [],
   };
 }
 
-// ─── Shared file-download helper ──────────────────────────────────────────────
-// Tries the configured API base first, then a couple of common local dev
-// ports as a fallback — mirrors the pattern already used by the bulk-assign
-// "Download PDF" buttons, kept in one place so the report buttons share it.
 async function downloadPdf(path: string, filename: string): Promise<boolean> {
   const candidates = [API_BASE_URL, "http://localhost:5001/api", "http://localhost:5002/api"];
   for (const base of candidates) {
@@ -244,39 +224,7 @@ async function downloadPdf(path: string, filename: string): Promise<boolean> {
   return false;
 }
 
-// ─── Sample seed data with historical records ────────────────────────────────
-
-const SEED_LOCATIONS: Location[] = [
-  {
-    id: "LOC-ADM-0001",
-    name: "Administrative Sites",
-    status: "Active",
-    region: "Colombo",
-    sites: [
-      {
-        id: "SITE-ADM-WH1",
-        name: "Warehouse 1",
-        manager: "Admin Manager",
-        managerHistory: [
-          { managerName: "K.D. Perera", changedAt: "2024-01-01" },
-          { managerName: "S. Jayasinghe", changedAt: "2025-03-14" }
-        ],
-        region: "Colombo",
-        seq: 1,
-        status: "Active",
-        client: "Government",
-        contactNumber: "0112345678",
-        address: "1, Warehouse Road, Colombo 01",
-        startDate: "2024-01-01",
-        remarks: "Main warehouse",
-        assignedPersons: [],
-        assignedVehicles: [],
-      }
-    ],
-  }
-];
-
-// ─── Shared modals ────────────────────────────────────────────────────────────
+// ─── Shared Modals ────────────────────────────────────────────────────────────
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
@@ -294,19 +242,133 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
 
 function ConfirmModal({ name, onClose, onConfirm }: any) {
   return (
-    <Modal title="Confirm Delete" onClose={onClose}>
+    <Modal title="Confirm Action" onClose={onClose}>
       <p className="text-slate-600">
-        Are you sure you want to delete <strong className="text-rose-600">{name}</strong>? This action cannot be undone.
+        Are you sure you want to proceed with <strong className="text-rose-600">{name}</strong>? This action cannot be undone.
       </p>
       <div className="flex justify-end gap-3 mt-6">
         <button onClick={onClose} className="btn">Cancel</button>
-        <button onClick={onConfirm} className="btn btn-danger">Delete</button>
+        <button onClick={onConfirm} className="btn btn-danger">Confirm</button>
       </div>
     </Modal>
   );
 }
 
-// ─── Site Modal – Tracks Manager Mutations ───────────────────────────────────
+// ─── Resource Assignment History Modal ───────────────────────────────────────
+
+function ResourceHistoryModal({ resource, resourceType, onClose }: { resource: any; resourceType: "EMPLOYEE" | "VEHICLE"; onClose: () => void }) {
+  const [history, setHistory] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+  setHistory(Array.isArray(res) ? res : []);
+} catch (error) {
+  setHistory([]);
+} finally {
+  setLoading(false);
+}
+    })();
+  }, [resource.id, resourceType]);
+
+  return (
+    <Modal title={`Allocation History — ${resource.name || resource.vehiclePlate}`} onClose={onClose}>
+      <div className="space-y-3">
+        {loading ? (
+          <div className="py-8 text-center text-xs text-slate-400">Loading history logs...</div>
+        ) : !history || history.length === 0 ? (
+          <div className="py-8 text-center text-xs text-slate-400">No allocation history recorded for this {resourceType.toLowerCase()}.</div>
+        ) : (
+          <div className="relative border-l-2 border-indigo-100 pl-4 ml-2 space-y-4">
+            {history.map((entry, idx) => (
+              <div key={idx} className="relative text-xs">
+                <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-indigo-600 ring-4 ring-white" />
+                <div className="font-semibold text-slate-800 text-sm">
+                  {entry.status === "ACTIVE" ? `Assigned to Site: ${entry.siteSubId || "General"}` : `Status: ${entry.status}`}
+                </div>
+                {entry.locationId && <div className="text-slate-500">Location ID: {entry.locationId}</div>}
+                <div className="text-slate-400 font-mono mt-0.5">
+                  {new Date(entry.createdAt).toLocaleString()}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="flex justify-end mt-6">
+        <button onClick={onClose} className="btn btn-primary">Close</button>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Transfer Modal ───────────────────────────────────────────────────────────
+
+function TransferModal({ resource, resourceType, locations, currentSiteId, onClose, onTransfer }: any) {
+  const [targetLocationId, setTargetLocationId] = useState("");
+  const [targetSiteId, setTargetSiteId] = useState("");
+
+  const availableLocations = locations || [];
+  const selectedLoc = availableLocations.find((l: any) => l.id === targetLocationId);
+  const availableSites = selectedLoc ? selectedLoc.sites.filter((s: any) => s.id !== currentSiteId) : [];
+
+  const handleExecuteTransfer = () => {
+    if (!targetLocationId || !targetSiteId) return;
+    onTransfer(resource.id, resourceType, targetLocationId, targetSiteId);
+  };
+
+  return (
+    <Modal title={`Transfer ${resourceType}: ${resource.name || resource.vehiclePlate}`} onClose={onClose}>
+      <div className="space-y-4">
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Target Location *</label>
+          <select
+            value={targetLocationId}
+            onChange={(e) => { setTargetLocationId(e.target.value); setTargetSiteId(""); }}
+            className="w-full border rounded-xl px-4 py-2.5 text-sm"
+          >
+            <option value="">-- Select Location --</option>
+            {availableLocations.map((loc: any) => (
+              <option key={loc.id} value={loc.id}>{loc.name} ({loc.region})</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Target Site *</label>
+          <select
+            value={targetSiteId}
+            disabled={!targetLocationId || availableSites.length === 0}
+            onChange={(e) => setTargetSiteId(e.target.value)}
+            className="w-full border rounded-xl px-4 py-2.5 text-sm disabled:bg-slate-100"
+          >
+            <option value="">-- Select Site --</option>
+            {availableSites.map((s: any) => (
+              <option key={s.id} value={s.id}>{s.name} ({s.id})</option>
+            ))}
+          </select>
+          {targetLocationId && availableSites.length === 0 && (
+            <p className="text-xs text-amber-600 mt-1">No alternative active sites available in this location.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-3 mt-6">
+        <button onClick={onClose} className="btn">Cancel</button>
+        <button
+          onClick={handleExecuteTransfer}
+          disabled={!targetLocationId || !targetSiteId}
+          className="btn btn-primary disabled:opacity-50"
+        >
+          Execute Transfer
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Site Modal ───────────────────────────────────────────────────────────────
 
 function SiteModal({ title, initial, onClose, onSave }: any) {
   const [form, setForm] = useState(initial || {
@@ -342,7 +404,6 @@ function SiteModal({ title, initial, onClose, onSave }: any) {
 
     let updatedHistory = [...form.managerHistory];
 
-    // Check if the manager changed to log previous manager into deployment history
     if (initial && initial.manager && initial.manager !== form.manager) {
       const historyEntry: ManagerHistoryEntry = {
         managerName: initial.manager,
@@ -430,23 +491,16 @@ function LocationFormModal({ onClose, onSave, initial, isEdit = false }: any) {
   );
 }
 
-// ─── Location Detail Panel (Renders Child Logs & History Accordions) ──────────
-//
-// `onUpdate` performs a genuine PUT to persist edits (add/edit/delete site,
-// change location fields). `onLocalUpdate` only updates React state in the
-// parent — no network call — and is used after the assign-people /
-// assign-vehicles endpoints, since those already persisted the change
-// server-side. Reusing `onUpdate` there was the bug: it fired a redundant
-// PUT that rebuilt subLevels and wiped the assignment that was just saved.
+// ─── Location Detail Panel ───────────────────────────────────────────────────
 
-function LocationDetailPanel({ location, onUpdate, onLocalUpdate, onClose }: any) {
+function LocationDetailPanel({ location, locations, onUpdate, onAllocationChange, onClose }: any) {
   const color = getLocationColor(location.id);
   const [modal, setModal] = useState<
     { type: "add" } | { type: "edit"; site: Site } | { type: "delete"; site: Site } | null
   >(null);
-  const [showPeopleAssign, setShowPeopleAssign] = useState(false);
-  const [showVehiclesAssign, setShowVehiclesAssign] = useState(false);
-  const [assignSiteId, setAssignSiteId] = useState<string | null>(null);
+  const [transferState, setTransferState] = useState<{ resource: any; resourceType: "EMPLOYEE" | "VEHICLE"; siteId: string } | null>(null);
+  const [historyResource, setHistoryResource] = useState<{ resource: any; resourceType: "EMPLOYEE" | "VEHICLE" } | null>(null);
+  const [showAllocationMatrix, setShowAllocationMatrix] = useState(false);
   const [downloadingReport, setDownloadingReport] = useState(false);
 
   const handleDownloadReport = async () => {
@@ -459,7 +513,6 @@ function LocationDetailPanel({ location, onUpdate, onLocalUpdate, onClose }: any
     }
   };
 
-  // Track open state for individual site histories in layout
   const [expandedHistories, setExpandedHistories] = useState<Record<string, boolean>>({});
 
   const toggleHistory = (siteId: string) => {
@@ -469,10 +522,6 @@ function LocationDetailPanel({ location, onUpdate, onLocalUpdate, onClose }: any
   const updateLocation = (patch: Partial<Location>) => onUpdate({ ...location, ...patch });
 
   const handleAddSite = async (data: any) => {
-    // No client-side id generation. The backend is the single source of
-    // truth for sub-level ids (see normalizeSubLevels in
-    // site-locations.service.ts) — it assigns a fresh, collision-free id
-    // on save and the mapped response replaces this optimistic entry.
     const newSite = {
       ...data,
       managerHistory: [],
@@ -495,10 +544,47 @@ function LocationDetailPanel({ location, onUpdate, onLocalUpdate, onClose }: any
 
   const handleDeleteSite = async () => {
     if (modal?.type !== "delete") return;
+    
+    if (modal.site.assignedPersons.length > 0 || modal.site.assignedVehicles.length > 0) {
+      alert(`Cannot delete site "${modal.site.name}". Please unassign or transfer active employees and vehicles first.`);
+      return;
+    }
+
     await updateLocation({
       sites: location.sites.filter((s: Site) => s.id !== modal.site.id),
     });
     setModal(null);
+  };
+
+  const handleUnassignResource = async (resourceId: string, resourceType: "EMPLOYEE" | "VEHICLE") => {
+    if (!window.confirm(`Are you sure you want to unassign this ${resourceType.toLowerCase()}?`)) return;
+    try {
+      await apiFetch(`/allocations/${encodeURIComponent(resourceId)}`, {
+        method: "PUT",
+        body: JSON.stringify({ resourceType, status: "IDLE", locationId: null, siteSubId: null }),
+      });
+      onAllocationChange();
+    } catch (err) {
+      alert(`Failed to unassign ${resourceType.toLowerCase()}`);
+    }
+  };
+
+  const handleExecuteTransfer = async (resourceId: string, resourceType: "EMPLOYEE" | "VEHICLE", targetLocationId: string, targetSiteId: string) => {
+    try {
+      await apiFetch(`/allocations/${encodeURIComponent(resourceId)}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          resourceType,
+          status: "ACTIVE",
+          locationId: targetLocationId,
+          siteSubId: targetSiteId,
+        }),
+      });
+      setTransferState(null);
+      onAllocationChange();
+    } catch (err) {
+      alert(`Failed to transfer ${resourceType.toLowerCase()}`);
+    }
   };
 
   return (
@@ -536,8 +622,7 @@ function LocationDetailPanel({ location, onUpdate, onLocalUpdate, onClose }: any
             <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${color.idChip}`}>{location.sites.length}</span>
           </h3>
           <div className="flex items-center gap-2">
-            <button onClick={() => setShowPeopleAssign(true)} className="btn btn-sm bg-blue-600 text-white hover:bg-blue-700"><User size={14} /> Bulk Assign People</button>
-            <button onClick={() => setShowVehiclesAssign(true)} className="btn btn-sm bg-purple-600 text-white hover:bg-purple-700"><Building2 size={14} /> Bulk Assign Vehicles</button>
+            <button onClick={() => setShowAllocationMatrix(true)} className="btn btn-sm bg-emerald-600 text-white hover:bg-emerald-700"><Users size={14} /> Allocation Matrix</button>
             <button onClick={() => setModal({ type: "add" })} className="btn btn-sm btn-primary"><Plus size={14} /> Add Site</button>
           </div>
         </div>
@@ -549,9 +634,6 @@ function LocationDetailPanel({ location, onUpdate, onLocalUpdate, onClose }: any
         ) : (
           <div className="space-y-4 overflow-auto pr-1">
             {location.sites.map((site: Site, index: number) => {
-              // Fall back to index as the React key only — never as the
-              // actual site id used for edit/delete matching — in case a
-              // legacy record still slips through without one.
               const rowKey = site.id || `unindexed-${index}`;
               const isHistoryOpen = !!expandedHistories[rowKey];
               return (
@@ -586,25 +668,89 @@ function LocationDetailPanel({ location, onUpdate, onLocalUpdate, onClose }: any
                         {site.remarks && <div className="col-span-2"><span className="font-medium">Remarks:</span> {site.remarks}</div>}
                       </div>
 
-                      {site.assignedPersons && site.assignedPersons.length > 0 && (
-                        <div className="mt-3 text-sm text-slate-600">
-                          <div className="font-medium text-slate-700">Assigned People:</div>
-                          <div className="text-sm text-slate-500">{site.assignedPersons.map((p:any)=>p.name).join(', ')}</div>
+                      {/* Assigned Persons with Direct Actions and History */}
+                      <div className="mt-3 text-sm">
+                        <div className="font-semibold text-slate-700 text-xs uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                          <User size={12} /> Assigned Personnel ({site.assignedPersons?.length || 0})
                         </div>
-                      )}
+                        {site.assignedPersons && site.assignedPersons.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {site.assignedPersons.map((p) => (
+                              <div key={p.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-200 shadow-sm rounded-lg text-xs font-medium text-slate-700">
+                                <span>{p.name}</span>
+                                <button
+                                  onClick={() => setHistoryResource({ resource: p, resourceType: "EMPLOYEE" })}
+                                  title="View Full Person History"
+                                  className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-indigo-50"
+                                >
+                                  <Clock size={12} />
+                                </button>
+                                <button
+                                  onClick={() => setTransferState({ resource: p, resourceType: "EMPLOYEE", siteId: site.id })}
+                                  title="Transfer Person to Another Site"
+                                  className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-50"
+                                >
+                                  <ArrowRightLeft size={12} />
+                                </button>
+                                <button
+                                  onClick={() => handleUnassignResource(p.id, "EMPLOYEE")}
+                                  title="Unassign Person"
+                                  className="text-slate-400 hover:text-rose-600 p-0.5 rounded hover:bg-rose-50"
+                                >
+                                  <UserX size={12} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-400 italic">No personnel currently assigned.</p>
+                        )}
+                      </div>
 
-                      {site.assignedVehicles && site.assignedVehicles.length > 0 && (
-                        <div className="mt-2 text-sm text-slate-600">
-                          <div className="font-medium text-slate-700">Assigned Vehicles:</div>
-                          <div className="text-sm text-slate-500">{site.assignedVehicles.map((v:any)=>v.vehiclePlate || v.id).join(', ')}</div>
+                      {/* Assigned Vehicles with Direct Actions and History */}
+                      <div className="mt-3 text-sm">
+                        <div className="font-semibold text-slate-700 text-xs uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                          <Truck size={12} /> Assigned Vehicles ({site.assignedVehicles?.length || 0})
                         </div>
-                      )}
+                        {site.assignedVehicles && site.assignedVehicles.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {site.assignedVehicles.map((v) => (
+                              <div key={v.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-200 shadow-sm rounded-lg text-xs font-medium text-slate-700">
+                                <span>{v.vehiclePlate}</span>
+                                <button
+                                  onClick={() => setHistoryResource({ resource: v, resourceType: "VEHICLE" })}
+                                  title="View Full Vehicle History"
+                                  className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-indigo-50"
+                                >
+                                  <Clock size={12} />
+                                </button>
+                                <button
+                                  onClick={() => setTransferState({ resource: v, resourceType: "VEHICLE", siteId: site.id })}
+                                  title="Transfer Vehicle to Another Site"
+                                  className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-50"
+                                >
+                                  <ArrowRightLeft size={12} />
+                                </button>
+                                <button
+                                  onClick={() => handleUnassignResource(v.id, "VEHICLE")}
+                                  title="Unassign Vehicle"
+                                  className="text-slate-400 hover:text-rose-600 p-0.5 rounded hover:bg-rose-50"
+                                >
+                                  <X size={12} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-400 italic">No vehicles currently assigned.</p>
+                        )}
+                      </div>
 
-                      {/* Expanded Section for History Timeline */}
+                      {/* Expanded Manager History */}
                       {isHistoryOpen && site.managerHistory && site.managerHistory.length > 0 && (
                         <div className="mt-3 pt-3 border-t border-dashed border-slate-200 bg-white/70 p-2.5 rounded-lg">
                           <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
-                            <Clock size={12} /> Previous Manager History
+                            <Clock size={12} /> Manager History
                           </div>
                           <div className="relative border-l border-slate-200 pl-3 ml-1.5 space-y-2">
                             {site.managerHistory.map((entry, idx) => (
@@ -620,7 +766,6 @@ function LocationDetailPanel({ location, onUpdate, onLocalUpdate, onClose }: any
                       )}
                     </div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition flex-shrink-0 ml-2">
-                      <button onClick={() => { setAssignSiteId(site.id || null); setShowPeopleAssign(true); }} title="Assign person" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><UserPlus size={14} /></button>
                       <button onClick={() => setModal({ type: "edit", site })} className="p-1.5 rounded-lg hover:bg-white text-slate-500"><Edit2 size={14} /></button>
                       <button onClick={() => setModal({ type: "delete", site })} className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-500"><Trash2 size={14} /></button>
                     </div>
@@ -636,70 +781,362 @@ function LocationDetailPanel({ location, onUpdate, onLocalUpdate, onClose }: any
       {modal?.type === "edit" && <SiteModal title="Edit Site" initial={modal.site} onClose={() => setModal(null)} onSave={handleEditSite} />}
       {modal?.type === "delete" && <ConfirmModal name={modal.site.name} onClose={() => setModal(null)} onConfirm={handleDeleteSite} />}
 
-      {showPeopleAssign && (
-        <Modal title="Bulk Assign People" onClose={() => { setShowPeopleAssign(false); setAssignSiteId(null); }}>
-          <AssignPeopleForm
-            sites={location.sites}
-            locationId={location.id}
-            initialSiteId={assignSiteId}
-            onClose={() => { setShowPeopleAssign(false); setAssignSiteId(null); }}
-              onAssigned={async (assignments?: any[]) => {
-                if (Array.isArray(assignments)) {
-                  // Assignment was already persisted by /assign-people.
-                  // Just reflect it in local state — do NOT go through
-                  // onUpdate (that fires a PUT that rebuilds subLevels
-                  // and would strip this exact data back out).
-                  const updated = { ...location, sites: location.sites.map((s: any) => {
-                    const match = assignments.find(a => a.locationId === location.id && a.subLevelId === s.id);
-                    return match ? { ...s, assignedPersons: Array.isArray(match.persons) ? match.persons : [] } : s;
-                  }) };
-                  onLocalUpdate && onLocalUpdate(updated);
-                  return;
-                }
-                // fallback: fetch refreshed from server, again only a local sync
-                const refreshed = await apiFetch('/site-locations');
-                if (Array.isArray(refreshed)) {
-                  const match = refreshed.find((r: any) => r.id === location.id);
-                  if (match) onLocalUpdate && onLocalUpdate(mapBackendLocation(match));
-                }
-              }}
-          />
-        </Modal>
+      {transferState && (
+        <TransferModal
+          resource={transferState.resource}
+          resourceType={transferState.resourceType}
+          locations={locations}
+          currentSiteId={transferState.siteId}
+          onClose={() => setTransferState(null)}
+          onTransfer={handleExecuteTransfer}
+        />
       )}
 
-      {showVehiclesAssign && (
-        <Modal title="Bulk Assign Vehicles" onClose={() => setShowVehiclesAssign(false)}>
-          <AssignVehiclesForm
-            sites={location.sites}
-            locationId={location.id}
-            onClose={() => setShowVehiclesAssign(false)}
-            onAssigned={async (assignments?: any[]) => {
-              if (Array.isArray(assignments)) {
-                // Same reasoning as above — local sync only, already persisted.
-                const updated = { ...location, sites: location.sites.map((s: any) => {
-                  const match = assignments.find(a => a.locationId === location.id && a.subLevelId === s.id);
-                  return match ? { ...s, assignedVehicles: Array.isArray(match.vehicles) ? match.vehicles : [] } : s;
-                }) };
-                onLocalUpdate && onLocalUpdate(updated);
-                return;
-              }
-              const refreshed = await apiFetch('/site-locations');
-              if (Array.isArray(refreshed)) {
-                const match = refreshed.find((r: any) => r.id === location.id);
-                if (match) onLocalUpdate && onLocalUpdate(mapBackendLocation(match));
-              }
-            }}
-          />
+      {historyResource && (
+        <ResourceHistoryModal
+          resource={historyResource.resource}
+          resourceType={historyResource.resourceType}
+          onClose={() => setHistoryResource(null)}
+        />
+      )}
+
+      {showAllocationMatrix && (
+        <Modal title={`Daily Allocation Matrix — ${location.name}`} onClose={() => setShowAllocationMatrix(false)}>
+          <AllocationMatrix location={location} onClose={() => setShowAllocationMatrix(false)} onAllocationChange={onAllocationChange} />
         </Modal>
       )}
     </div>
   );
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
+// ─── Allocation Matrix ────────────────────────────────────────────────────────
+
+// ─── Allocation Matrix ────────────────────────────────────────────────────────
+
+function AllocationMatrix({ location, onClose, onAllocationChange }: any) {
+  const [activeTab, setActiveTab] = useState<'EMPLOYEE' | 'VEHICLE'>('EMPLOYEE');
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [allocations, setAllocations] = useState<any[]>([]);
+  const [historyEntries, setHistoryEntries] = useState<any[] | null>(null);
+  const [historyOpenFor, setHistoryOpenFor] = useState<{ id: string; type: 'EMPLOYEE' | 'VEHICLE' } | null>(null);
+
+  const columns = [
+    { id: 'IDLE', label: 'Idle' },
+    ...((location.sites || []).map((s: any) => ({ id: s.id, label: s.name }))),
+    { id: 'REPAIR', label: 'Repair Places' },
+    { id: 'ABSENT', label: 'Absent' },
+  ];
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [emps, vehs, allocs] = await Promise.all([
+          apiFetch('/employees'),
+          apiFetch('/vehicles'),
+          apiFetch('/allocations'),
+        ]);
+        if (Array.isArray(emps)) setEmployees(emps);
+        if (Array.isArray(vehs)) setVehicles(vehs);
+        if (Array.isArray(allocs)) setAllocations(allocs);
+      } catch (e) {
+        console.error("Allocation fetch failed", e);
+      }
+    })();
+  }, []);
+
+  const getAllocation = (resourceId: string, resourceType: string) =>
+    allocations.find((a: any) => a.resourceId === resourceId && a.resourceType === resourceType) || null;
+
+  const handleSet = async (resourceId: string, resourceType: 'EMPLOYEE' | 'VEHICLE', columnId: string) => {
+    const payload: any = { resourceType, status: columnId };
+    let targetLabel = columnId;
+
+    if (columnId === 'IDLE' || columnId === 'ABSENT') {
+      payload.locationId = null;
+      payload.siteSubId = null;
+      targetLabel = columnId;
+    } else if (columnId === 'REPAIR') {
+      payload.locationId = location.id;
+      payload.siteSubId = null;
+      targetLabel = `Repair places @ ${location.name}`;
+    } else {
+      payload.locationId = location.id;
+      payload.siteSubId = columnId;
+      payload.status = 'ACTIVE';
+      const site = (location.sites || []).find((s: any) => s.id === columnId);
+      targetLabel = site ? `${site.name} (${site.id}) @ ${location.name}` : `${columnId} @ ${location.name}`;
+    }
+
+    const resourceName = resourceType === 'EMPLOYEE'
+      ? (employees.find((x: any) => x.id === resourceId)?.fullName || resourceId)
+      : (vehicles.find((x: any) => x.id === resourceId)?.registrationNo || resourceId);
+
+    const ok = window.confirm(`Assign ${resourceType.toLowerCase()} "${resourceName}" to ${targetLabel}?`);
+    if (!ok) return;
+
+    try {
+      const res = await apiFetch(`/allocations/${encodeURIComponent(resourceId)}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+
+      setAllocations((prev) => {
+        const others = prev.filter((p: any) => !(p.resourceId === resourceId && p.resourceType === resourceType));
+        return [res, ...others];
+      });
+
+      onAllocationChange();
+    } catch (e) {
+      console.error('Allocation update failed', e);
+      alert('Failed to update allocation');
+    }
+  };
+
+  const openHistory = async (resourceId: string, resourceType: 'EMPLOYEE' | 'VEHICLE') => {
+    setHistoryOpenFor({ id: resourceId, type: resourceType });
+    try {
+      const res = await apiFetch(`/allocations/${encodeURIComponent(resourceId)}/history?type=${resourceType}`);
+      setHistoryEntries(Array.isArray(res) ? res : []);
+    } catch (e) {
+      setHistoryEntries([]);
+    }
+  };
+
+  // Metric Calculators
+  const getStats = (type: 'EMPLOYEE' | 'VEHICLE') => {
+    const list = type === 'EMPLOYEE' ? employees : vehicles;
+    let active = 0, idle = 0, repair = 0, absent = 0;
+
+    list.forEach((item) => {
+      const alloc = getAllocation(item.id, type);
+      if (!alloc || alloc.status === 'IDLE') idle++;
+      else if (alloc.status === 'ACTIVE') active++;
+      else if (alloc.status === 'REPAIR') repair++;
+      else if (alloc.status === 'ABSENT') absent++;
+    });
+
+    return { total: list.length, active, idle, repair, absent };
+  };
+
+  const currentStats = getStats(activeTab);
+
+  return (
+    <div className="space-y-4">
+      {/* Tab Switcher & Navigation */}
+      <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+        <div className="flex gap-2">
+          <button
+            onClick={() => setActiveTab('EMPLOYEE')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'EMPLOYEE'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            <User size={14} /> Personnel ({employees.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('VEHICLE')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'VEHICLE'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            <Truck size={14} /> Fleet & Vehicles ({vehicles.length})
+          </button>
+        </div>
+      </div>
+
+      {/* Resource Metrics Bar */}
+      <div className="grid grid-cols-4 gap-3">
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-center">
+          <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Total Units</div>
+          <div className="text-lg font-bold text-slate-800">{currentStats.total}</div>
+        </div>
+        <div className="bg-emerald-50/60 border border-emerald-200 rounded-xl p-2.5 text-center">
+          <div className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider">Active</div>
+          <div className="text-lg font-bold text-emerald-700">{currentStats.active}</div>
+        </div>
+        <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-2.5 text-center">
+          <div className="text-[10px] font-semibold text-amber-600 uppercase tracking-wider">Idle</div>
+          <div className="text-lg font-bold text-amber-700">{currentStats.idle}</div>
+        </div>
+        <div className="bg-rose-50/60 border border-rose-200 rounded-xl p-2.5 text-center">
+          <div className="text-[10px] font-semibold text-rose-600 uppercase tracking-wider">Repair / Absent</div>
+          <div className="text-lg font-bold text-rose-700">{currentStats.repair + currentStats.absent}</div>
+        </div>
+      </div>
+
+      <p className="text-xs text-slate-500 italic">
+        Click a cell to set global state for {activeTab === 'EMPLOYEE' ? 'personnel' : 'vehicles'}. Each resource is limited to one active location state.
+      </p>
+
+      {/* Allocation Matrix Table */}
+      <div className="overflow-x-auto border rounded-2xl shadow-sm bg-white">
+        <table className="w-full border-collapse text-xs">
+          <thead>
+            <tr className="bg-slate-100/70 border-b border-slate-200">
+              <th className="p-3 text-left font-bold text-slate-700 min-w-[160px] sticky left-0 bg-slate-100 z-10 border-r border-slate-200">
+                {activeTab === 'EMPLOYEE' ? 'Employee Name' : 'Vehicle Plate / Reg No'}
+              </th>
+              {columns.map((c) => (
+                <th key={c.id} className="p-3 text-center font-bold text-slate-700 min-w-[110px]">
+                  {c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {activeTab === 'EMPLOYEE' ? (
+              employees.length === 0 ? (
+                <tr>
+                  <td colSpan={columns.length + 1} className="p-6 text-center text-slate-400 italic">
+                    No employees registered in system.
+                  </td>
+                </tr>
+              ) : (
+                employees.map((e) => (
+                  <tr key={`emp-${e.id}`} className="border-t border-slate-100 hover:bg-indigo-50/20 transition-colors">
+                    <td className="p-2.5 font-semibold text-slate-800 sticky left-0 bg-white border-r border-slate-100 z-10">
+                      {e.fullName || e.name}
+                    </td>
+                    {columns.map((col) => {
+                      const alloc = getAllocation(e.id, 'EMPLOYEE');
+                      const active =
+                        alloc &&
+                        ((col.id === 'IDLE' && alloc.status === 'IDLE') ||
+                          (col.id === 'REPAIR' && alloc.status === 'REPAIR') ||
+                          (col.id === 'ABSENT' && alloc.status === 'ABSENT') ||
+                          (alloc.status === 'ACTIVE' && alloc.siteSubId === col.id));
+                      return (
+                        <td key={col.id} className="p-1 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => handleSet(e.id, 'EMPLOYEE', col.id)}
+                              className={`flex-1 py-1.5 rounded-lg font-bold text-xs transition-all ${
+                                active
+                                  ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-300'
+                                  : 'hover:bg-slate-100 text-slate-300 hover:text-slate-500'
+                              }`}
+                            >
+                              {active ? '✓' : '—'}
+                            </button>
+                            <button
+                              title="View History Log"
+                              onClick={() => openHistory(e.id, 'EMPLOYEE')}
+                              className="p-1 rounded text-slate-400 hover:text-indigo-600 hover:bg-slate-100"
+                            >
+                              <Clock size={12} />
+                            </button>
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))
+              )
+            ) : vehicles.length === 0 ? (
+              <tr>
+                <td colSpan={columns.length + 1} className="p-6 text-center text-slate-400 italic">
+                  No vehicles registered in system.
+                </td>
+              </tr>
+            ) : (
+              vehicles.map((v) => (
+                <tr key={`veh-${v.id}`} className="border-t border-slate-100 hover:bg-emerald-50/20 transition-colors">
+                  <td className="p-2.5 font-semibold text-slate-800 sticky left-0 bg-white border-r border-slate-100 z-10">
+                    <div className="flex items-center gap-1.5">
+                      <Truck size={13} className="text-slate-400" />
+                      <span>{v.registrationNo || v.vehiclePlate || v.id}</span>
+                    </div>
+                  </td>
+                  {columns.map((col) => {
+                    const alloc = getAllocation(v.id, 'VEHICLE');
+                    const active =
+                      alloc &&
+                      ((col.id === 'IDLE' && alloc.status === 'IDLE') ||
+                        (col.id === 'REPAIR' && alloc.status === 'REPAIR') ||
+                        (col.id === 'ABSENT' && alloc.status === 'ABSENT') ||
+                        (alloc.status === 'ACTIVE' && alloc.siteSubId === col.id));
+                    return (
+                      <td key={col.id} className="p-1 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => handleSet(v.id, 'VEHICLE', col.id)}
+                            className={`flex-1 py-1.5 rounded-lg font-bold text-xs transition-all ${
+                              active
+                                ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300'
+                                : 'hover:bg-slate-100 text-slate-300 hover:text-slate-500'
+                            }`}
+                          >
+                            {active ? '✓' : '—'}
+                          </button>
+                          <button
+                            title="View History Log"
+                            onClick={() => openHistory(v.id, 'VEHICLE')}
+                            className="p-1 rounded text-slate-400 hover:text-emerald-600 hover:bg-slate-100"
+                          >
+                            <Clock size={12} />
+                          </button>
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* History Audit Drawer */}
+      {historyOpenFor && (
+        <div className="mt-4 border border-slate-200 rounded-xl p-4 bg-slate-50 shadow-inner">
+          <div className="flex justify-between items-center mb-2">
+            <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+              <HistoryIcon size={14} className="text-indigo-600" /> Audit Trail — {historyOpenFor.type}: {historyOpenFor.id}
+            </h4>
+            <button
+              onClick={() => {
+                setHistoryOpenFor(null);
+                setHistoryEntries(null);
+              }}
+              className="text-xs text-slate-400 hover:text-slate-600 font-semibold"
+            >
+              Close
+            </button>
+          </div>
+          <div className="max-h-40 overflow-y-auto text-xs space-y-1.5 pr-1">
+            {historyEntries === null ? (
+              <div className="text-slate-400 italic">Loading audit entries...</div>
+            ) : historyEntries.length === 0 ? (
+              <div className="text-slate-400 italic">No historical allocations recorded.</div>
+            ) : (
+              historyEntries.map((h, idx) => (
+                <div key={idx} className="p-2 bg-white rounded-lg border border-slate-200 flex justify-between items-center shadow-2xs">
+                  <span className="font-semibold text-slate-700">
+                    Status: <span className="text-indigo-600">{h.status}</span> {h.siteSubId ? `@ Site: ${h.siteSubId}` : ''}
+                  </span>
+                  <span className="text-slate-400 font-mono text-[11px]">{new Date(h.createdAt).toLocaleString()}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Page Component ───────────────────────────────────────────────────────
 
 export default function LocationManagementPage() {
-  const [locations, setLocations] = useState<Location[]>(SEED_LOCATIONS);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [allocations, setAllocations] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [vehicles, setVehicles] = useState<any[]>([]);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
@@ -710,50 +1147,90 @@ export default function LocationManagementPage() {
   const [deleteLocationTarget, setDeleteLocationTarget] = useState<Location | null>(null);
   const [downloadingAllReport, setDownloadingAllReport] = useState(false);
 
-  const handleDownloadAllReport = async () => {
-    setDownloadingAllReport(true);
+  const fetchData = async () => {
     try {
-      const ok = await downloadPdf(`/site-locations/reports/all`, `site-locations-report.pdf`);
-      if (!ok) setApiError("Couldn't generate the full report. Please check your connection and try again.");
+      setLoading(true);
+      setApiError("");
+      const [locRes, allocRes, empRes, vehRes] = await Promise.all([
+        apiFetch("/site-locations"),
+        apiFetch("/allocations"),
+        apiFetch("/employees"),
+        apiFetch("/vehicles"),
+      ]);
+
+      if (Array.isArray(allocRes)) setAllocations(allocRes);
+      if (Array.isArray(empRes)) setEmployees(empRes);
+      if (Array.isArray(vehRes)) setVehicles(vehRes);
+
+      if (Array.isArray(locRes)) {
+        const mapped = locRes.map(mapBackendLocation);
+        setLocations(mapped);
+        setSelectedLocationId((current) =>
+          current && mapped.some((l) => l.id === current) ? current : mapped[0]?.id || null
+        );
+      }
+    } catch (error: any) {
+      console.error("Data load failed", error);
+      setApiError(error?.message || "Unable to sync with system services.");
     } finally {
-      setDownloadingAllReport(false);
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    const loadLocations = async () => {
-      try {
-        setLoading(true);
-        setApiError("");
-        const result = await apiFetch("/site-locations");
-        if (Array.isArray(result)) {
-          const mapped = result.map(mapBackendLocation);
-          setLocations(mapped);
-          setSelectedLocationId((current) =>
-            current && mapped.some((l) => l.id === current) ? current : mapped[0]?.id || null
-          );
-        }
-      } catch (error: any) {
-        console.warn("Load locations failed, using seed data", error);
-        setApiError(error?.message || "Unable to load locations from backend.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadLocations();
+    fetchData();
   }, []);
 
-  const filteredLocations = locations.filter((loc) => {
+  const hydratedLocations = locations.map((loc) => {
+    const updatedSites = loc.sites.map((site) => {
+      const activePersons = allocations
+        .filter((a) => a.resourceType === "EMPLOYEE" && a.status === "ACTIVE" && a.siteSubId === site.id)
+        .map((a) => {
+          const emp = employees.find((e) => e.id === a.resourceId);
+          return { id: a.resourceId, name: emp?.fullName || emp?.name || a.resourceId };
+        });
+
+      const activeVehicles = allocations
+        .filter((a) => a.resourceType === "VEHICLE" && a.status === "ACTIVE" && a.siteSubId === site.id)
+        .map((a) => {
+          const veh = vehicles.find((v) => v.id === a.resourceId);
+          return { id: a.resourceId, vehiclePlate: veh?.registrationNo || veh?.vehiclePlate || a.resourceId };
+        });
+
+      return {
+        ...site,
+        assignedPersons: activePersons,
+        assignedVehicles: activeVehicles,
+      };
+    });
+
+    return { ...loc, sites: updatedSites };
+  });
+
+  const filteredLocations = hydratedLocations.filter((loc) => {
     const q = search.toLowerCase();
     const matchesSearch = loc.name.toLowerCase().includes(q) || loc.id.toLowerCase().includes(q);
     const matchesFilter = filterStatus === "All" || loc.status === filterStatus;
     return matchesSearch && matchesFilter;
   });
 
+  const handleDownloadAllReport = async () => {
+    setDownloadingAllReport(true);
+    try {
+      const ok = await downloadPdf(`/site-locations/reports/all`, `site-locations-report.pdf`);
+      if (!ok) setApiError("Couldn't generate full report. Check server connectivity.");
+    } finally {
+      setDownloadingAllReport(false);
+    }
+  };
+
   const handleAddLocation = async (data: any) => {
     try {
       setApiError("");
-      const created = await apiFetch("/site-locations", { method: "POST", body: JSON.stringify(locationPayload({ ...data, sites: [] })) });
+      const created = await apiFetch("/site-locations", {
+        method: "POST",
+        body: JSON.stringify(locationPayload({ ...data, sites: [] })),
+      });
       const newLoc = mapBackendLocation(created);
       setLocations((prev) => [newLoc, ...prev]);
       setShowAddLocation(false);
@@ -766,19 +1243,15 @@ export default function LocationManagementPage() {
   const handleUpdateLocation = async (updated: Location) => {
     try {
       setApiError("");
-      const saved = await apiFetch(`/site-locations/${updated.id}`, { method: "PUT", body: JSON.stringify(locationPayload(updated)) });
+      const saved = await apiFetch(`/site-locations/${updated.id}`, {
+        method: "PUT",
+        body: JSON.stringify(locationPayload(updated)),
+      });
       const mapped = mapBackendLocation(saved);
-      setLocations((prev) => prev.map((l) => l.id === mapped.id ? mapped : l));
+      setLocations((prev) => prev.map((l) => (l.id === mapped.id ? mapped : l)));
     } catch (error: any) {
       setApiError(error?.message || "Unable to update location.");
     }
-  };
-
-  // Pure local state sync — no network call. Used after actions (like
-  // bulk-assign) that already persisted their change through a dedicated
-  // endpoint, so we just need the UI to reflect the new state.
-  const handleLocalUpdateLocation = (updated: Location) => {
-    setLocations((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
   };
 
   const handleDeleteLocation = async (id: string) => {
@@ -793,11 +1266,11 @@ export default function LocationManagementPage() {
     }
   };
 
-  const selectedLocation = locations.find((l) => l.id === selectedLocationId);
+  const selectedLocation = hydratedLocations.find((l) => l.id === selectedLocationId);
 
   return (
     <div className="h-full flex gap-5">
-      {/* ── Left: Location list ── */}
+      {/* Left Sidebar */}
       <div className="w-96 flex-shrink-0 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
         <div className="p-4 border-b border-slate-100">
           {apiError && (
@@ -822,7 +1295,7 @@ export default function LocationManagementPage() {
             <button
               onClick={handleDownloadAllReport}
               disabled={downloadingAllReport}
-              title="Download a detailed PDF report for every location"
+              title="Download detailed PDF report"
               className={`btn bg-slate-800 text-white hover:bg-slate-900 ${downloadingAllReport ? "opacity-60 cursor-wait" : ""}`}
             >
               <Download size={14} /> {downloadingAllReport ? "..." : "Download All"}
@@ -832,7 +1305,7 @@ export default function LocationManagementPage() {
 
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {loading ? (
-            <div className="py-10 text-center text-sm text-slate-400">Loading locations...</div>
+            <div className="py-10 text-center text-sm text-slate-400">Syncing database state...</div>
           ) : filteredLocations.length === 0 ? (
             <div className="py-10 text-center text-sm text-slate-400">No locations found.</div>
           ) : filteredLocations.map((loc) => {
@@ -874,188 +1347,28 @@ export default function LocationManagementPage() {
         </div>
       </div>
 
-      {/* ── Right: Detail panel ── */}
+      {/* Right Workstation Panel */}
       <div className="flex-1 min-w-0">
         {selectedLocation ? (
           <LocationDetailPanel
             location={selectedLocation}
+            locations={hydratedLocations}
             onUpdate={handleUpdateLocation}
-            onLocalUpdate={handleLocalUpdateLocation}
+            onAllocationChange={fetchData}
             onClose={() => setSelectedLocationId(null)}
           />
         ) : (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm h-full flex flex-col items-center justify-center text-slate-400">
             <Building2 size={48} className="mb-3 opacity-30" />
-            <p className="text-sm font-medium">Select a location to view its sites</p>
+            <p className="text-sm font-medium">Select a location to inspect operational sites</p>
           </div>
         )}
       </div>
 
-      {/* Modals */}
+      {/* Top Level Modals */}
       {showAddLocation && <LocationFormModal onClose={() => setShowAddLocation(false)} onSave={handleAddLocation} />}
       {editLocation && <LocationFormModal isEdit initial={editLocation} onClose={() => setEditLocation(null)} onSave={async (data: any) => { await handleUpdateLocation({ ...editLocation, ...data }); setEditLocation(null); }} />}
       {deleteLocationTarget && <ConfirmModal name={deleteLocationTarget.name} onClose={() => setDeleteLocationTarget(null)} onConfirm={() => handleDeleteLocation(deleteLocationTarget.id)} />}
-    </div>
-  );
-}
-
-// ─── Bulk Assign Forms (used by LocationDetailPanel) ─────────────────────
-function AssignPeopleForm({ sites, onClose, onAssigned, initialSiteId, locationId }: any) {
-  const [employees, setEmployees] = useState<any[]>([]);
-  const [selectedSites, setSelectedSites] = useState<Set<string>>(new Set());
-  const [selectedPersons, setSelectedPersons] = useState<Set<string>>(new Set());
-  const [banner, setBanner] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  useEffect(() => { (async () => { try { const res = await apiFetch('/employees'); if (Array.isArray(res)) setEmployees(res); } catch {} })(); }, []);
-
-  // If an initial site was provided (single-site assign), preselect it
-  useEffect(() => {
-    if (initialSiteId) {
-      setSelectedSites(new Set([initialSiteId]));
-    }
-  }, [initialSiteId]);
-
-  const toggleSite = (id: string) => { const s = new Set(selectedSites); s.has(id) ? s.delete(id) : s.add(id); setSelectedSites(s); };
-  const togglePerson = (id: string) => { const s = new Set(selectedPersons); s.has(id) ? s.delete(id) : s.add(id); setSelectedPersons(s); };
-
-  const handleAssign = async (download = false) => {
-    const persons = Array.from(selectedPersons).map(id => { const e = employees.find((x:any)=>x.id===id); return { id, name: e?.fullName || e?.name || '' }; });
-    // selectedSites are sub-level ids; include parent locationId and subLevelId
-    const targets = Array.from(selectedSites).map(subLevelId => ({ locationId: locationId || '', subLevelId }));
-    if (persons.length === 0 || targets.length === 0) { setBanner({ type: 'error', message: 'Select at least one site and one person' }); return; }
-    const assignments = targets.map(t => ({ locationId: t.locationId, subLevelId: t.subLevelId, persons }));
-    try {
-      if (!download) {
-        await apiFetch('/site-locations/assign-people', { method: 'POST', body: JSON.stringify({ assignments }) });
-        setBanner({ type: 'success', message: 'People assigned' });
-        await new Promise((r) => setTimeout(r, 700));
-        onAssigned && onAssigned(assignments);
-        onClose();
-        return;
-      }
-
-      // Download flow: try known base URLs until a blob is returned
-      const candidates = [API_BASE_URL, 'http://localhost:5001/api', 'http://localhost:5002/api'];
-      let ok = false;
-      for (const base of candidates) {
-        try {
-          const resp = await fetch(`${base}/site-locations/assign-people?download=true`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assignments }) });
-          if (!resp.ok) continue;
-          const blob = await resp.blob();
-          const u = URL.createObjectURL(blob);
-          const a = document.createElement('a'); a.href = u; a.download = 'site-people-assignments.pdf'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(u);
-          ok = true; break;
-        } catch (e) {
-          console.warn('download try failed', base, e);
-        }
-      }
-      if (!ok) throw new Error('Download failed (no reachable API)');
-      setBanner({ type: 'success', message: 'PDF downloaded' });
-      await new Promise((r) => setTimeout(r, 700));
-      onClose();
-    } catch (err:any) { console.error(err); setBanner({ type: 'error', message: err?.message || 'Failed' }); }
-  };
-
-  return (
-    <div>
-      {banner && (
-        <div className={`mb-3 p-2 rounded border ${banner.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`}>
-          <div className="flex justify-between items-center text-sm">
-            <div>{banner.message}</div>
-            <button onClick={() => setBanner(null)} className="text-xs opacity-70">Close</button>
-          </div>
-        </div>
-      )}
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <p className="text-sm font-semibold mb-2">Select Site</p>
-          <div className="max-h-64 overflow-auto border rounded p-2">
-            {sites.map((s:any)=> (
-              <div key={s.id} className="mb-2"><label><input type="checkbox" checked={selectedSites.has(s.id)} onChange={()=>toggleSite(s.id)} className="mr-2" /> {s.name} ({s.id})</label></div>
-            ))}
-          </div>
-        </div>
-        <div>
-          <p className="text-sm font-semibold mb-2">Select People</p>
-          <div className="max-h-64 overflow-auto border rounded p-2">
-            {employees.map((e:any)=> (<div key={e.id} className="mb-1"><label><input type="checkbox" checked={selectedPersons.has(e.id)} onChange={()=>togglePerson(e.id)} className="mr-2" /> {e.fullName || e.name}</label></div>))}
-          </div>
-        </div>
-      </div>
-      <div className="flex justify-end gap-2 mt-4">
-        <button className="btn" onClick={() => handleAssign(false)}>Assign</button>
-        <button className="btn" onClick={() => handleAssign(true)}>Download PDF</button>
-      </div>
-    </div>
-  );
-}
-
-function AssignVehiclesForm({ sites, onClose, onAssigned, locationId }: any) {
-  const [vehicles, setVehicles] = useState<any[]>([]);
-  const [selectedSites, setSelectedSites] = useState<Set<string>>(new Set());
-  const [selectedVehicles, setSelectedVehicles] = useState<Set<string>>(new Set());
-  const [banner, setBanner] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  useEffect(() => { (async () => { try { const res = await apiFetch('/vehicles'); if (Array.isArray(res)) setVehicles(res); } catch {} })(); }, []);
-  const toggleSite = (id: string) => { const s = new Set(selectedSites); s.has(id) ? s.delete(id) : s.add(id); setSelectedSites(s); };
-  const toggleVehicle = (id: string) => { const s = new Set(selectedVehicles); s.has(id) ? s.delete(id) : s.add(id); setSelectedVehicles(s); };
-  const handleAssign = async (download = false) => {
-    const vehs = Array.from(selectedVehicles).map(id => { const v = vehicles.find((x:any)=>x.id===id); return { id, vehiclePlate: v?.registrationNo || v?.vehiclePlate || '' }; });
-    // selectedSites are sub-level ids; include parent locationId and subLevelId
-    const targets = Array.from(selectedSites).map(subLevelId => ({ locationId: locationId || '', subLevelId }));
-    if (vehs.length === 0 || targets.length === 0) { setBanner({ type: 'error', message: 'Select at least one site and one vehicle' }); return; }
-    const assignments = targets.map(t => ({ locationId: t.locationId, subLevelId: t.subLevelId, vehicles: vehs }));
-    try {
-      if (!download) {
-        await apiFetch('/site-locations/assign-vehicles', { method: 'POST', body: JSON.stringify({ assignments }) });
-        setBanner({ type: 'success', message: 'Vehicles assigned' });
-        await new Promise((r) => setTimeout(r, 700));
-        onAssigned && onAssigned(assignments);
-        onClose();
-        return;
-      }
-      const candidates = [API_BASE_URL, 'http://localhost:5001/api', 'http://localhost:5002/api'];
-      let ok = false;
-      for (const base of candidates) {
-        try {
-          const resp = await fetch(`${base}/site-locations/assign-vehicles?download=true`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assignments }) });
-          if (!resp.ok) continue;
-          const blob = await resp.blob(); const u = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = u; a.download = 'site-vehicles-assignments.pdf'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(u);
-          ok = true; break;
-        } catch (e) { console.warn('download try failed', base, e); }
-      }
-      if (!ok) throw new Error('Download failed (no reachable API)');
-      setBanner({ type: 'success', message: 'PDF downloaded' });
-      await new Promise((r) => setTimeout(r, 700));
-      onClose();
-    } catch (err:any) { setBanner({ type: 'error', message: err?.message || 'Failed' }); }
-  };
-  return (
-    <div>
-      {banner && (
-        <div className={`mb-3 p-2 rounded border ${banner.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`}>
-          <div className="flex justify-between items-center text-sm">
-            <div>{banner.message}</div>
-            <button onClick={() => setBanner(null)} className="text-xs opacity-70">Close</button>
-          </div>
-        </div>
-      )}
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <p className="text-sm font-semibold mb-2">Select Site</p>
-          <div className="max-h-64 overflow-auto border rounded p-2">
-            {sites.map((s:any)=> (<div key={s.id} className="mb-2"><label><input type="checkbox" checked={selectedSites.has(s.id)} onChange={()=>toggleSite(s.id)} className="mr-2" /> {s.name} ({s.id})</label></div>))}
-          </div>
-        </div>
-        <div>
-          <p className="text-sm font-semibold mb-2">Select Vehicles</p>
-          <div className="max-h-64 overflow-auto border rounded p-2">
-            {vehicles.map((v:any)=> (<div key={v.id} className="mb-1"><label><input type="checkbox" checked={selectedVehicles.has(v.id)} onChange={()=>toggleVehicle(v.id)} className="mr-2" /> {v.registrationNo || v.vehiclePlate || v.plate || v.id}</label></div>))}
-          </div>
-        </div>
-      </div>
-      <div className="flex justify-end gap-2 mt-4">
-        <button className="btn" onClick={() => handleAssign(false)}>Assign</button>
-        <button className="btn" onClick={() => handleAssign(true)}>Download PDF</button>
-      </div>
     </div>
   );
 }

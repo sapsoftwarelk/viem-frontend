@@ -493,6 +493,34 @@ function TransferNoteFormModal({
     setForm((prev: any) => ({ ...prev, [field]: value }));
   };
 
+  // Dynamic person lists filtered by current allocation (active at site)
+  const [senderCandidates, setSenderCandidates] = useState<any[] | null>(null);
+  const [receiverCandidates, setReceiverCandidates] = useState<any[] | null>(null);
+
+  useEffect(() => {
+    // load senders when fromSiteId changes
+    const loadSenders = async () => {
+      if (!form.fromSiteId) { setSenderCandidates(null); return; }
+      try {
+        const res = await apiFetch(`/allocations/active?locationId=${encodeURIComponent(form.fromLocationId || '')}&siteSubId=${encodeURIComponent(form.fromSiteId)}&type=EMPLOYEE`);
+        if (Array.isArray(res)) setSenderCandidates(res.map((p:any)=>({ id: p.id, label: p.name })));
+      } catch (e) { setSenderCandidates(null); }
+    };
+    loadSenders();
+  }, [form.fromLocationId, form.fromSiteId]);
+
+  useEffect(() => {
+    // load receivers when toSiteId changes
+    const loadReceivers = async () => {
+      if (!form.toSiteId) { setReceiverCandidates(null); return; }
+      try {
+        const res = await apiFetch(`/allocations/active?locationId=${encodeURIComponent(form.toLocationId || '')}&siteSubId=${encodeURIComponent(form.toSiteId)}&type=EMPLOYEE`);
+        if (Array.isArray(res)) setReceiverCandidates(res.map((p:any)=>({ id: p.id, label: p.name })));
+      } catch (e) { setReceiverCandidates(null); }
+    };
+    loadReceivers();
+  }, [form.toLocationId, form.toSiteId]);
+
   // FIX: use the functional updater and always derive `newItems` from the
   // latest `prev` state (not from the `form` closure). Previously this read
   // `form.items` directly, so two handleItemChange calls fired back-to-back
@@ -565,7 +593,10 @@ function TransferNoteFormModal({
   const itemOptions = getItemOptions(availableItems);
 
   // person and vehicle helpers (optional)
-  const personOptions = (availablePersons || []).map((p: any) => p.label);
+  const liveSenders = senderCandidates ?? availablePersons;
+  const liveReceivers = receiverCandidates ?? availablePersons;
+  const personOptions = (liveSenders || []).map((p: any) => p.label);
+  const receiverOptions = (liveReceivers || []).map((p: any) => p.label);
   const vehicleOptions = (vehicles || []).map((v: any) => `${v.plate || v.vehiclePlate || v.name || v.id}`);
 
   return (
@@ -695,10 +726,10 @@ function TransferNoteFormModal({
           <div>
             <label className="block text-sm font-semibold text-slate-600 mb-1.5">Received By</label>
             <Combobox
-              options={personOptions}
+              options={receiverOptions}
               value={form.receivedBy || ""}
               onChange={(val) => handleChange("receivedBy", val)}
-              placeholder={personOptions.length ? "Search or select receiver..." : "Type receiver name..."}
+              placeholder={receiverOptions.length ? "Search or select receiver..." : "Type receiver name..."}
             />
           </div>
           <div>
